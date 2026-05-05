@@ -1,0 +1,281 @@
+Machine Learning Notes (Comprehensive Overview)
+
+Introduction to Machine Learning:
+Machine Learning (ML) is a subset of Artificial Intelligence (AI) that enables systems to learn patterns from data and improve performance without being explicitly programmed. Instead of writing rules manually, models learn from examples.
+
+Types of Machine Learning:
+1. Supervised Learning:
+   In supervised learning, the model is trained on labeled data. Each input has a corresponding output.
+   Examples: Linear Regression, Logistic Regression, Decision Trees.
+
+2. Unsupervised Learning:
+   In unsupervised learning, the data is unlabeled. The model tries to find patterns or groupings.
+   Examples: K-Means Clustering, Hierarchical Clustering.
+
+3. Reinforcement Learning:
+   The model learns by interacting with an environment and receiving rewards or penalties.
+   Example: Game-playing AI.
+
+---
+
+Data Preprocessing:
+Before training a model, data must be cleaned and prepared.
+
+Steps include:
+- Handling missing values
+- Removing duplicates
+- Encoding categorical variables
+- Feature scaling (Normalization or Standardization)
+
+Feature Scaling:
+Feature scaling ensures all features are on the same scale.
+
+1. Normalization:
+   Scales values between 0 and 1.
+
+2. Standardization:
+   Transforms data to have mean = 0 and standard deviation = 1.
+
+---
+
+Linear Regression:
+Linear regression is used to predict continuous values. It assumes a linear relationship between input variables and output.
+
+Equation:
+y = mx + b
+
+Where:
+- m is slope
+- b is intercept
+
+Loss Function:
+Mean Squared Error (MSE) is commonly used.
+
+---
+
+Logistic Regression:
+Used for classification problems. It predicts probabilities using the sigmoid function.
+
+Sigmoid Function:
+Transforms values into range (0,1)
+
+---
+
+Gradient Descent:
+Gradient descent is an optimization algorithm used to minimize the loss function.
+
+Steps:
+1. Initialize parameters randomly
+2. Compute gradient
+3. Update parameters using learning rate
+4. Repeat until convergence
+
+Learning Rate:
+Controls step size. Too high → overshoot, too low → slow convergence.
+
+Types of Gradient Descent:
+- Batch Gradient Descent
+- Stochastic Gradient Descent (SGD)
+- Mini-batch Gradient Descent
+
+---
+
+Overfitting and Underfitting:
+
+Overfitting:
+Model learns noise from training data and performs poorly on test data.
+
+Underfitting:
+Model is too simple and fails to capture patterns.
+
+Solutions:
+- Cross-validation
+- Regularization
+- More data
+- Simpler models
+
+---
+
+Regularization:
+
+Regularization prevents overfitting by penalizing large weights.
+
+Types:
+1. L1 Regularization (Lasso):
+   Encourages sparsity (some weights become zero)
+
+2. L2 Regularization (Ridge):
+   Reduces magnitude of weights
+
+---
+
+Decision Trees:
+A tree-based model used for classification and regression.
+
+Key Concepts:
+- Root node
+- Decision node
+- Leaf node
+
+Splitting Criteria:
+- Gini Index
+- Entropy
+
+---
+
+Random Forest:
+An ensemble method that combines multiple decision trees.
+
+Advantages:
+- Reduces overfitting
+- Improves accuracy
+
+---
+
+K-Nearest Neighbors (KNN):
+Classifies a data point based on majority vote of nearest neighbors.
+
+Parameter:
+K = number of neighbors
+
+---
+
+Support Vector Machine (SVM):
+Finds optimal hyperplane to separate classes.
+
+Kernel Trick:
+Used for non-linear data (RBF, Polynomial kernels)
+
+---
+
+Clustering:
+Clustering groups similar data points.
+
+K-Means Clustering:
+1. Choose K clusters
+2. Assign points to nearest centroid
+3. Update centroids
+4. Repeat
+
+---
+
+Principal Component Analysis (PCA):
+Dimensionality reduction technique.
+
+Purpose:
+- Reduce features
+- Retain maximum variance
+
+---
+
+Neural Networks:
+Inspired by the human brain.
+
+Components:
+- Input layer
+- Hidden layers
+- Output layer
+
+Activation Functions:
+- ReLU
+- Sigmoid
+- Tanh
+
+---
+
+Backpropagation:
+Used to update weights in neural networks.
+
+Steps:
+1. Forward pass
+2. Compute loss
+3. Backward pass (gradients)
+4. Update weights
+
+---
+
+Deep Learning:
+Subset of ML using deep neural networks.
+
+Applications:
+- Image recognition
+- NLP
+- Speech recognition
+
+---
+
+Evaluation Metrics:
+
+Classification:
+- Accuracy
+- Precision
+- Recall
+- F1-score
+
+Regression:
+- Mean Squared Error (MSE)
+- Mean Absolute Error (MAE)
+
+---
+
+Confusion Matrix:
+Used to evaluate classification models.
+
+Contains:
+- True Positive
+- True Negative
+- False Positive
+- False Negative
+
+---
+
+Bias vs Variance:
+
+Bias:
+Error due to wrong assumptions.
+
+Variance:
+Error due to sensitivity to small fluctuations.
+
+Goal:
+Find balance between bias and variance.
+
+---
+
+Hyperparameter Tuning:
+
+Methods:
+- Grid Search
+- Random Search
+
+---
+
+Cross Validation:
+Splits data into multiple folds to validate model performance.
+
+Example:
+K-Fold Cross Validation
+
+---
+
+Natural Language Processing (NLP):
+
+Tasks:
+- Text classification
+- Sentiment analysis
+- Named Entity Recognition
+
+---
+
+Computer Vision:
+
+Applications:
+- Object detection
+- Image classification
+- Face recognition
+
+---
+
+Conclusion:
+
+Machine learning is a powerful tool for solving complex problems. Proper data preprocessing, model selection, and evaluation are crucial for building effective systems. Understanding core concepts like gradient descent, overfitting, and regularization helps in designing robust models.
