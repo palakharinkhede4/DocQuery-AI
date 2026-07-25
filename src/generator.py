@@ -81,7 +81,9 @@ def clean_text_glitches(text):
         "ver min": "vermin",
         "ventil ation": "ventilation",
         "ac tivit y": "activity",
-        "oper ation": "operation"
+        "oper ation": "operation",
+        "Anon-permeable": "A non-permeable",
+        "acoarse": "a coarse"
     }
     for glitch, fix in glitches.items():
         text = re.sub(re.escape(glitch), fix, text, flags=re.IGNORECASE)
@@ -92,75 +94,100 @@ def clean_text_glitches(text):
     return text
 
 
+def extract_complete_bullet_items(context):
+    """
+    Parses context into unbroken multi-line bullet points and complete sentences.
+    Ensures bullet items (e.g., 'Roof (catchment area): ...') are never truncated mid-phrase.
+    """
+    context_clean = clean_text_glitches(context)
+    lines = [l.strip() for l in context_clean.split("\n") if l.strip() and not l.startswith("[Source:")]
+
+    bullets = []
+    current = []
+
+    for line in lines:
+        # Check if line starts a new bullet item or bold section
+        is_bullet_start = bool(re.match(r'^[•\-\*\d+\.]', line)) or bool(re.match(r'^[A-Z][a-zA-Z\s\(\)]+:', line))
+        if is_bullet_start:
+            if current:
+                full_item = " ".join(current).strip()
+                if len(full_item) > 15:
+                    bullets.append(full_item)
+            current = [re.sub(r'^[•\-\*]\s*', '', line).strip()]
+        else:
+            if current:
+                current.append(line)
+            else:
+                if len(line) > 15:
+                    bullets.append(line)
+
+    if current:
+        full_item = " ".join(current).strip()
+        if len(full_item) > 15:
+            bullets.append(full_item)
+
+    return bullets
+
+
 def synthesize_extractive_answer(context, query):
     """
     Production-Grade RAG Context Synthesizer.
-    Parses definitions, components, and bullet items into a clean structured response.
+    Parses full unbroken definitions & multi-line bullet points into a clean response.
     """
     if not context or not context.strip():
         return "No relevant information found in the document context."
 
-    context_clean = clean_text_glitches(context)
+    items = extract_complete_bullet_items(context)
+    if not items:
+        return "No relevant text extracted from context."
 
-    # Extract non-header lines
-    lines = [line.strip() for line in context_clean.split("\n") if line.strip() and not line.startswith("[Source:")]
+    # Look for overview / definition item
+    overview_item = None
+    component_items = []
 
-    # Find overview/definition sentences
-    overviews = []
-    bullets = []
+    for item in items:
+        item_lower = item.lower()
+        if any(kw in item_lower for kw in ["consists of", "typically include", "comprises", "is defined as"]):
+            if not overview_item and len(item) > 25:
+                overview_item = item
 
-    for line in lines:
-        l_lower = line.lower()
-        if any(kw in l_lower for kw in ["consists of", "typically include", "comprises", "is defined as"]):
-            # Clean overview phrase
-            clean_l = re.sub(r'^[•\-\*]\s*', '', line).strip()
-            if len(clean_l) > 20:
-                overviews.append(clean_l)
+        # Component / detail item
+        if ":" in item or item.startswith(('•', '-', '*')):
+            component_items.append(item)
 
-        # Detect bullet list items
-        if line.startswith(('•', '-', '*')) or re.match(r'^[A-Z][a-z\s]+:', line):
-            clean_b = re.sub(r'^[•\-\*]\s*', '', line).strip()
-            if len(clean_b) > 15:
-                bullets.append(clean_b)
+    if not component_items:
+        component_items = [i for i in items if len(i) > 25]
 
-    # Assemble response sections
-    response_sections = []
+    response_blocks = []
 
-    # 1. Overview Section
-    if overviews:
-        best_overview = overviews[0]
-        response_sections.append(f"**Overview:**\n{best_overview}")
+    # Overview block
+    if overview_item:
+        response_blocks.append(f"**Overview:**\n{overview_item}")
     else:
-        # Fallback first meaningful sentence
-        first_line = next((l for l in lines if len(l) > 30), None)
-        if first_line:
-            response_sections.append(f"**Overview:**\n{first_line}")
+        response_blocks.append(f"**Overview:**\n{items[0]}")
 
-    # 2. Key Components / System Elements Section
-    if bullets:
-        formatted_bullets = []
-        seen = set()
-        for b in bullets[:8]:  # Top 8 components
-            # Format bold component headers if colon present e.g. "Roof (catchment area): Details"
-            if ":" in b and not b.startswith("http"):
-                parts = b.split(":", 1)
-                comp_name = parts[0].strip()
-                comp_desc = parts[1].strip()
-                if comp_name not in seen:
-                    seen.add(comp_name)
-                    formatted_bullets.append(f"- **{comp_name}**: {comp_desc}")
-            else:
-                if b[:40] not in seen:
-                    seen.add(b[:40])
-                    formatted_bullets.append(f"- {b}")
+    # Components / System details block
+    formatted_components = []
+    seen = set()
 
-        if formatted_bullets:
-            response_sections.append("**System Components & Details:**\n" + "\n".join(formatted_bullets))
+    for item in component_items[:10]:
+        clean_item = re.sub(r'^[•\-\*\d+\.]\s*', '', item).strip()
+        if ":" in clean_item and not clean_item.startswith("http"):
+            parts = clean_item.split(":", 1)
+            c_title = parts[0].strip()
+            c_desc = parts[1].strip()
+            if c_title not in seen:
+                seen.add(c_title)
+                formatted_components.append(f"- **{c_title}**: {c_desc}")
+        else:
+            if clean_item[:40] not in seen:
+                seen.add(clean_item[:40])
+                formatted_components.append(f"- {clean_item}")
 
-    if not response_sections:
-        response_sections.append(f"**Extracted Technical Summary:**\n" + "\n".join([f"- {l}" for l in lines[:4]]))
+    if formatted_components:
+        response_blocks.append("**System Components & Details:**\n" + "\n".join(formatted_components))
 
-    return "\n\n".join(response_sections)
+    return "\n\n".join(response_blocks)
 
 
 _local_tokenizer = None
