@@ -3,9 +3,9 @@ from src.ingest import get_embedding_model
 from src.vectorstore import get_vector_store
 
 
-def retrieve(query, top_k=TOP_K):
+def retrieve(query, top_k=TOP_K, session_id=None):
     """
-    Retrieve top-k relevant document chunks along with source metadata.
+    Retrieve top-k relevant document chunks from session-isolated vector store.
     """
     query_clean = query.strip()
     if not query_clean:
@@ -14,7 +14,7 @@ def retrieve(query, top_k=TOP_K):
     model = get_embedding_model()
     query_embedding = model.encode([query_clean], normalize_embeddings=True)
 
-    vstore = get_vector_store()
+    vstore = get_vector_store(session_id=session_id)
     results = vstore.search(query_embedding, top_k=top_k)
 
     formatted_results = []

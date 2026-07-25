@@ -1,14 +1,14 @@
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from src.pipeline import run_pipeline
 from src.ingest import ingest_file_objects, ingest_directory
-from src.vectorstore import get_vector_store
+from src.vectorstore import get_vector_store, clear_session_store
 
 app = FastAPI(
     title="Local Technical Document Q&A RAG API",
-    description="100% Local & Privacy-Preserving RAG API with FAISS Vector Search and Local LLM Generation",
+    description="100% Local & Privacy-Preserving Session-Isolated RAG API with FAISS Vector Search",
     version="2.0.0"
 )
 
@@ -24,25 +24,27 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     query: str
     top_k: Optional[int] = 4
+    session_id: Optional[str] = "default_session"
 
 
 @app.get("/")
 def home():
     return {
-        "message": "Local RAG API running 🚀 (100% Offline & Private)",
+        "message": "Local RAG API running 🚀 (100% Offline & Session-Isolated)",
         "vector_store": "FAISS",
         "docs_url": "/docs"
     }
 
 
 @app.get("/health")
-def health_check():
-    vstore = get_vector_store()
+def health_check(session_id: Optional[str] = "default_session"):
+    vstore = get_vector_store(session_id=session_id)
     doc_stats = vstore.get_documents()
     return {
         "status": "healthy",
         "vector_store_type": "FAISS",
         "mode": "100% Local & Offline",
+        "session_id": session_id,
         "stats": doc_stats
     }
 
@@ -51,12 +53,15 @@ def health_check():
 def ask_question(req: QueryRequest):
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query string cannot be empty.")
-    result = run_pipeline(req.query, top_k=req.top_k or 4)
+    result = run_pipeline(req.query, top_k=req.top_k or 4, session_id=req.session_id)
     return result
 
 
 @app.post("/upload")
-async def upload_documents(files: List[UploadFile] = File(...)):
+async def upload_documents(
+    files: List[UploadFile] = File(...),
+    session_id: Optional[str] = Query("default_session")
+):
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
 
@@ -68,7 +73,7 @@ async def upload_documents(files: List[UploadFile] = File(...)):
             "content": content
         })
 
-    result = ingest_file_objects(file_objects)
+    result = ingest_file_objects(file_objects, session_id=session_id)
     if result.get("status") == "error":
         raise HTTPException(status_code=400, detail=result.get("message"))
 
@@ -76,19 +81,18 @@ async def upload_documents(files: List[UploadFile] = File(...)):
 
 
 @app.post("/ingest-demo")
-def ingest_demo_docs():
-    """Ingest 12 pre-loaded technical demo documents from data/docs."""
-    return ingest_directory()
+def ingest_demo_docs(session_id: Optional[str] = Query("default_session")):
+    """Ingest 12 pre-loaded technical demo documents into session-isolated index."""
+    return ingest_directory(session_id=session_id)
 
 
 @app.get("/documents")
-def list_documents():
-    vstore = get_vector_store()
+def list_documents(session_id: Optional[str] = Query("default_session")):
+    vstore = get_vector_store(session_id=session_id)
     return vstore.get_documents()
 
 
 @app.delete("/documents")
-def clear_documents():
-    vstore = get_vector_store()
-    vstore.clear()
-    return {"message": "Document index cleared successfully."}
+def clear_documents(session_id: Optional[str] = Query("default_session")):
+    clear_session_store(session_id=session_id)
+    return {"message": f"Document index for session '{session_id}' cleared successfully."}

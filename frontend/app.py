@@ -1,5 +1,6 @@
 import sys
 import os
+import uuid
 
 # Ensure project root directory is included in sys.path for Streamlit Cloud deployment
 sys_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -17,6 +18,12 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Initialize unique session ID for session isolation
+if "session_id" not in st.session_state:
+    st.session_state["session_id"] = uuid.uuid4().hex[:12]
+
+session_id = st.session_state["session_id"]
 
 # Custom CSS for modern UI
 st.markdown("""
@@ -58,7 +65,7 @@ st.markdown("""
 
 def check_backend():
     try:
-        res = requests.get(f"{API_URL}/health", timeout=3)
+        res = requests.get(f"{API_URL}/health?session_id={session_id}", timeout=3)
         if res.status_code == 200:
             return res.json()
     except Exception:
@@ -72,14 +79,15 @@ health_info = check_backend()
 with st.sidebar:
     st.image("https://img.icons8.com/isometric-folders/100/database.png", width=60)
     st.title("Local Knowledge Base")
+    st.caption(f"Session ID: `{session_id}`")
 
     # Backend Connection Status
     if health_info:
         st.markdown("Status: 🟢 **Connected**", unsafe_allow_html=True)
-        st.markdown("Vector Store: <span class='badge-faiss'>FAISS (Local)</span>", unsafe_allow_html=True)
+        st.markdown("Vector Store: <span class='badge-faiss'>FAISS (Session Isolated)</span>", unsafe_allow_html=True)
         st.markdown("Mode: <span class='badge-local'>100% Offline / Private</span>", unsafe_allow_html=True)
     else:
-        st.info("ℹ️ Running in Direct Ingestion Mode (FAISS Local)")
+        st.info("ℹ️ Direct Session Mode (FAISS Isolated)")
 
     st.divider()
 
@@ -100,13 +108,13 @@ with st.sidebar:
 
                 try:
                     if health_info:
-                        res = requests.post(f"{API_URL}/upload", files=files_payload)
+                        res = requests.post(f"{API_URL}/upload?session_id={session_id}", files=files_payload)
                         data = res.json()
                         st.success(f"✅ Ingested {data.get('total_chunks', 0)} chunks across {len(data.get('processed_files', []))} document(s)!")
                     else:
                         from src.ingest import ingest_file_objects
                         file_objs = [{"name": f.name, "content": f.getvalue()} for f in uploaded_files]
-                        data = ingest_file_objects(file_objs)
+                        data = ingest_file_objects(file_objs, session_id=session_id)
                         st.success(f"✅ Ingested {data.get('total_chunks', 0)} chunks locally!")
                     st.rerun()
                 except Exception as e:
@@ -114,14 +122,14 @@ with st.sidebar:
 
     # Demo Documents Button
     if st.button("⚡ Load Demo Docs (12 Tech Topics)", type="primary", use_container_width=True):
-        with st.spinner("Loading pre-loaded 12 technical documents..."):
+        with st.spinner("Loading pre-loaded 12 technical documents for this session..."):
             try:
                 if health_info:
-                    res = requests.post(f"{API_URL}/ingest-demo")
+                    res = requests.post(f"{API_URL}/ingest-demo?session_id={session_id}")
                     data = res.json()
                 else:
                     from src.ingest import ingest_directory
-                    data = ingest_directory()
+                    data = ingest_directory(session_id=session_id)
                 st.success(f"✅ Ingested {data.get('total_chunks', 0)} chunks from 12 Demo Tech Docs!")
                 st.rerun()
             except Exception as e:
@@ -129,44 +137,48 @@ with st.sidebar:
 
     st.divider()
 
-    # Active Documents Stats
-    st.subheader("📊 Indexed Documents")
+    # Active Documents Stats for Current Session
+    st.subheader("📊 Session Indexed Documents")
     try:
         if health_info:
-            doc_data = requests.get(f"{API_URL}/documents").json()
+            doc_data = requests.get(f"{API_URL}/documents?session_id={session_id}").json()
         else:
             from src.vectorstore import get_vector_store
-            doc_data = get_vector_store().get_documents()
+            doc_data = get_vector_store(session_id=session_id).get_documents()
 
         files_list = doc_data.get("files", [])
         total_chunks = doc_data.get("total_chunks", 0)
 
-        st.metric("Total Indexed Chunks", total_chunks)
+        st.metric("Session Total Chunks", total_chunks)
         if files_list:
             for file_name in files_list:
                 st.caption(f"• 📄 `{file_name}`")
         else:
-            st.info("No documents uploaded yet. Click 'Load Demo Docs' above to try immediately!")
+            st.info("No documents uploaded in this session yet.")
     except Exception as e:
         st.caption("Unable to fetch document stats.")
 
     st.divider()
-    if st.button("🗑️ Clear Vector Index", type="secondary", use_container_width=True):
+    if st.button("🗑️ Reset Session & Clear Vectors", type="secondary", use_container_width=True):
         try:
             if health_info:
-                requests.delete(f"{API_URL}/documents")
+                requests.delete(f"{API_URL}/documents?session_id={session_id}")
             else:
-                from src.vectorstore import get_vector_store
-                get_vector_store().clear()
-            st.success("FAISS local index cleared!")
+                from src.vectorstore import clear_session_store
+                clear_session_store(session_id)
+
+            # Clear session state and generate new session ID
+            st.session_state["session_id"] = uuid.uuid4().hex[:12]
+            st.session_state["chat_history"] = []
+            st.success("Session reset & vector store cleaned!")
             st.rerun()
         except Exception as e:
-            st.error(f"Error clearing index: {e}")
+            st.error(f"Error resetting session: {e}")
 
 
 # Main Header
 st.markdown("<div class='main-header'>🔒 Local Technical Document Q&A System</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-header'>100% Private, Offline RAG powered by local FAISS vector search & local LLM</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-header'>100% Private, Session-Isolated RAG powered by FAISS & Local LLM</div>", unsafe_allow_html=True)
 
 # Tabs
 tab1, tab2, tab3 = st.tabs(["💬 Conversational Q&A", "🔍 Semantic Document Search", "⚙️ Architecture"])
@@ -182,14 +194,14 @@ with tab1:
         submit_button = st.form_submit_button("Ask Question 🚀", use_container_width=True)
 
     if submit_button and user_query.strip():
-        with st.spinner("Searching local FAISS index & synthesizing answer..."):
+        with st.spinner("Searching session FAISS index & synthesizing answer..."):
             try:
                 if health_info:
-                    res = requests.post(f"{API_URL}/ask", json={"query": user_query, "top_k": 4})
+                    res = requests.post(f"{API_URL}/ask", json={"query": user_query, "top_k": 4, "session_id": session_id})
                     response_data = res.json()
                 else:
                     from src.pipeline import run_pipeline
-                    response_data = run_pipeline(user_query, top_k=4)
+                    response_data = run_pipeline(user_query, top_k=4, session_id=session_id)
 
                 answer = response_data.get("answer", "No response generated.")
                 sources = response_data.get("sources", [])
@@ -222,7 +234,7 @@ with tab1:
 
 # Tab 2: Semantic Document Search Sandbox
 with tab2:
-    st.subheader("🔍 Explore FAISS Vector Search Results")
+    st.subheader("🔍 Explore Session FAISS Vector Search Results")
     search_query = st.text_input("Enter search keywords or phrase:")
     top_k_val = st.slider("Top Results (K)", min_value=1, max_value=10, value=4)
 
@@ -230,10 +242,10 @@ with tab2:
         if search_query:
             with st.spinner("Retrieving local vector matches..."):
                 from src.retriever import retrieve
-                results = retrieve(search_query, top_k=top_k_val)
+                results = retrieve(search_query, top_k=top_k_val, session_id=session_id)
 
                 if not results:
-                    st.warning("No matches found in local FAISS index.")
+                    st.warning("No matches found in session FAISS index.")
                 else:
                     for i, r in enumerate(results, 1):
                         st.markdown(f"### Match #{i} — `{r['source']}` (Page {r['page']})")
@@ -244,26 +256,25 @@ with tab2:
 
 # Tab 3: System Architecture
 with tab3:
-    st.subheader("🏗️ 100% Local RAG Architecture")
+    st.subheader("🏗️ 100% Session-Isolated RAG Architecture")
     st.markdown("""
-    ### Privacy-First Technical Workflow
+    ### Privacy & Isolation Features
 
     ```
-    ┌────────────────┐       ┌─────────────────┐       ┌──────────────────────┐
-    │ User Document  │ ────> │ Parser & Chunker│ ────> │ BGE Embedding Model  │
-    │ (PDF/DOCX/TXT) │       │ (Page Metadata) │       │ (Local HuggingFace)  │
-    └────────────────┘       └─────────────────┘       └──────────────────────┘
-                                                                  │
-                                                                  ▼
-    ┌────────────────┐       ┌─────────────────┐       ┌──────────────────────┐
-    │ Streamlit UI / │ <──── │ Local LLM       │ <──── │ Local FAISS Index    │
-    │ FastAPI Backend│       │ (TinyLlama HF)  │       │ (vectorstore/index)  │
-    └────────────────┘       └─────────────────┘       └──────────────────────┘
+    ┌────────────────┐       ┌─────────────────┐       ┌────────────────────────┐
+    │ User Document  │ ────> │ Parser & Chunker│ ────> │ BGE Embedding Model    │
+    │ (PDF/DOCX/TXT) │       │ (Page Metadata) │       │ (Local HuggingFace)    │
+    └────────────────┘       └─────────────────┘       └────────────────────────┘
+                                                                    │
+                                                                    ▼
+    ┌────────────────┐       ┌─────────────────┐       ┌────────────────────────┐
+    │ Streamlit UI / │ <──── │ Local LLM       │ <──── │ Isolated Session FAISS │
+    │ FastAPI Backend│       │ (Extractive RAG)│       │ (vectorstore/session)  │
+    └────────────────┘       └─────────────────┘       └────────────────────────┘
     ```
 
-    #### Key Privacy Features:
-    - **Zero External API Calls**: Completely self-contained; no data ever leaves your local machine.
-    - **FAISS Vector Database**: Fast local vector search persisted on disk.
-    - **Multi-Format Extraction**: PDF, DOCX, TXT, and Markdown support.
-    - **Pre-loaded Demo Knowledge Base**: 12 technical AI/ML documents included for instant testing.
+    #### Key Session Privacy & Cleanup Features:
+    - **Session Isolation**: Every browser tab gets a unique `Session ID`. Documents and vectors uploaded in one session never leak into another user's session.
+    - **Session Cleanup**: Resetting or closing a session automatically deletes vector index files from disk.
+    - **Zero Data Accumulation**: Prevents indefinite vector piling up over time.
     """)

@@ -2,11 +2,11 @@ from src.retriever import retrieve
 from src.generator import generate_answer
 
 
-def run_pipeline(query, top_k=4):
+def run_pipeline(query, top_k=4, session_id=None):
     """
     Run full end-to-end RAG pipeline: Query -> Retriever -> Prompt Context -> LLM Answer + Sources.
     """
-    retrieved_docs = retrieve(query, top_k=top_k)
+    retrieved_docs = retrieve(query, top_k=top_k, session_id=session_id)
 
     if not retrieved_docs:
         return {

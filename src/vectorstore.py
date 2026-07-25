@@ -1,5 +1,6 @@
 import os
 import pickle
+import shutil
 import numpy as np
 from config import VECTORSTORE_DIR
 
@@ -101,19 +102,33 @@ class FAISSVectorStore(BaseVectorStore):
     def clear(self):
         self.index = None
         self.documents = []
-        if os.path.exists(self.index_file):
-            os.remove(self.index_file)
-        if os.path.exists(self.pkl_file):
-            os.remove(self.pkl_file)
+        if os.path.exists(self.index_dir):
+            shutil.rmtree(self.index_dir, ignore_errors=True)
 
 
-# Global singleton instance for local vector store
-_faiss_store = None
+# Session-isolated store cache
+_session_stores = {}
 
 
-def get_vector_store():
-    """Return local FAISS Vector Store instance."""
-    global _faiss_store
-    if _faiss_store is None:
-        _faiss_store = FAISSVectorStore()
-    return _faiss_store
+def get_vector_store(session_id=None):
+    """Return session-isolated FAISS Vector Store instance."""
+    if not session_id:
+        session_id = "default_session"
+
+    if session_id not in _session_stores:
+        session_dir = os.path.join(VECTORSTORE_DIR, session_id)
+        _session_stores[session_id] = FAISSVectorStore(index_dir=session_dir)
+
+    return _session_stores[session_id]
+
+
+def clear_session_store(session_id):
+    """Clear and remove vector store for a specific session."""
+    if not session_id:
+        session_id = "default_session"
+
+    vstore = get_vector_store(session_id)
+    vstore.clear()
+
+    if session_id in _session_stores:
+        del _session_stores[session_id]
