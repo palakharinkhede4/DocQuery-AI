@@ -1,0 +1,46 @@
+TECHNICAL FACT SHEET: Rainwater collection and storage
+DRINKING-WATER
+
+This technical fact sheet provides information on a rainwater collection system, which supports the sanitary inspection of this drinking-water source.
+
+A rainwater collection system consists of a catchment area (e.g. the roof of a building) and guttering channels that direct rainwater into a collection vessel (e.g. storage tank).
+
+Rainwater typically contains lower levels of contaminants compared to groundwater or surface water sources. However, rainwater can become contaminated during collection and storage. For this reason, rain collected for drinking-water purposes should be appropriately treated/disinfected.
+
+Rainwater collection can be applied in many places, from individual household systems to systems serving multiple households or institutions (e.g. schools). Rainwater can be the primary source of drinking-water where there is sufficient rainfall all year round and adequate storage capacity. Often, rainwater collection is used to supplement other sources of water.
+
+Rainwater collection (L/year) can be estimated by multiplying the rainfall (mm/year) by the roof catchment area (m2) by a run-off coefficient, using the following formula:
+Rainwater collection (L/year) = Rainfall (mm/year) x Roof area (m2) x Run-off coefficient
+
+The run-off coefficient will depend on the roof material, and considers water losses (e.g. from evaporation, gutter overflow, leaks from pipes). The coefficient value is always less than 1 and may range from 0.9 for metal roofing to >0.4 for organic roofing materials.
+
+Rainwater collection systems typically include the following main components:
+
+• Roof (catchment area): A non-permeable surface (e.g. the roof of a house, school, shed) that captures rainwater and directs it via guttering channels to a collection system (e.g. water storage tank). Roof catchment areas are typically made from galvanized corrugated iron/steel, aluminium, stones, tiles, slates. Note – rainwater can also be collected from free standing structures that are not associated with a building (e.g. plastic sheeting).
+
+• Guttering channels: Directs water from the catchment area to a collection system. Guttering channels are typically made from polyvinylchloride (PVC), aluminium, galvanized iron/steel or zinc.
+
+• Filter box: Consists of a coarse filter that prevents larger pieces of debris (e.g. leaves, moss) from entering the storage tank. This type of filter will not effectively remove harmful microorganisms.
+
+• First flush system: Diverts the first flush of rainwater away from the water storage tank. This first flush of rainwater is typically of poorer quality due to the build-up of contaminants on the roof between rain events. The first flush system should be big enough relative to the size of the roof, to allow the first flush of rainwater to divert to waste (or for uses other than drinking-water).
+
+• Water storage tank: Stores rainwater that has been collected from the catchment area. Storage tanks are commonly made from high density polyethylene (HDPE), PVC, ferro-cement, metal or concrete. The tank should be covered and sealed to stop contaminants entering the storage tank.
+
+• Inspection hatch: Allows access to the storage tank for inspection or operations and maintenance. The inspection hatch should have a lid that is tightly fitting and lockable to stop contaminants from entering the tank, and to stop unauthorized access by people.
+
+• Tap: Allows users to collect water from the storage tank in a sanitary way, minimizing water wastage or spillage. The tap should be raised off the floor-level of the tank to minimize the risk of withdrawing sediment from the bottom of the tank during use. The tap also allows easy collection of water quality samples for analysis.
+
+• Overflow pipe: Directs excess water from the storage tank to a drainage point (e.g. soakaway, drain). This stops the tank overflowing in an uncontrolled way, which could contaminate the collection area or damage components. The overflow pipe should be facing downwards and have a vermin-proof screen (e.g. gauze or mesh) to prevent contaminants entering the storage tank. Water from the overflow pipe should not erode the ground beneath the pipe, as this could undermine and damage the tank, which could lead to contamination or water loss.
+
+• Air vent: Allows ventilation in the storage tank. The air vent should be facing downwards and have a vermin-proof screen to stop contaminants entering the tank.
+
+• Storage tank sump: Allows the storage tank to be emptied for cleaning and maintenance. The sump should be located at the lowest point of the tank floor to ensure the tank can be drained completely.
+
+• Fence or barrier: A physical barrier to stop animals from contaminating the collection area or damaging the components. It may also prevent unauthorized access by people. The fence or barrier should have an entry point (e.g. a gate) that can be closed tightly and latched shut/locked.
+
+• Soakaway: A hole in the ground filled with coarse material (e.g. gravel, stones, rocks), or that has a permeable wall, that allows water to drain back into the ground. This prevents water ponding and stagnating, which could contaminate the collection area. More robust drainage options (e.g. drainage channel or drain) may be required for higher volumes of overflow. Drainage water may be used to provide water for livestock or other activities, provided that these activities occur at a safe distance from the storage tank.
+
+Additional considerations:
+After a new rainwater collection system is constructed, it should be cleaned, flushed and disinfected (e.g. with chlorine), and flushed again, to disinfect the components before the water is used. Ideally, water quality testing should be conducted before the system is commissioned to confirm the water is safe for consumption. Periodic disinfection and testing may also be required (e.g. after long periods without rain, after maintenance).
+
+Construction materials (e.g. lead, copper, certain metallic paints) could affect the safety of the drinking-water. When constructing new rainwater collection systems or rehabilitating old ones, all materials used should be safe for contact with drinking-water (e.g. using materials approved through an appropriate certification scheme).

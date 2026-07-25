@@ -3,9 +3,9 @@ from src.ingest import get_embedding_model
 from src.vectorstore import get_vector_store
 
 
-def retrieve(query, top_k=TOP_K, session_id=None):
+def retrieve(query, top_k=TOP_K, session_id=None, min_score=0.55):
     """
-    Retrieve top-k relevant document chunks from session-isolated vector store using BGE query formatting.
+    Retrieve top-k relevant document chunks with BGE instruction and similarity score thresholding.
     """
     query_clean = query.strip()
     if not query_clean:
@@ -24,8 +24,15 @@ def retrieve(query, top_k=TOP_K, session_id=None):
     vstore = get_vector_store(session_id=session_id)
     results = vstore.search(query_embedding, top_k=top_k)
 
+    # Similarity score filtering: exclude low-confidence background noise chunks
+    filtered_results = [r for r in results if r.get("score", 0.0) >= min_score]
+
+    # Fallback to top result if all fell below threshold
+    if not filtered_results and results:
+        filtered_results = [results[0]]
+
     formatted_results = []
-    for r in results:
+    for r in filtered_results:
         meta = r.get("metadata", {})
         formatted_results.append({
             "text": r.get("text", ""),
