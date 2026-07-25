@@ -2,6 +2,7 @@ faiss-cpu
 sentence-transformers
 transformers
 torch
+torchvision
 fastapi
 uvicorn
 streamlit
