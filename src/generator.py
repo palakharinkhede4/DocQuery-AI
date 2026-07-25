@@ -2,17 +2,34 @@ import os
 import sys
 from config import LLM_MODEL, MAX_TOKENS
 
-_local_tokenizer = None
-_local_model = None
-
 
 def is_cloud_environment():
-    """Detect if running in RAM-constrained Streamlit Cloud container (1GB RAM limit)."""
+    """Detect if running in RAM-constrained Streamlit Cloud or <4GB container."""
     if os.getenv("DISABLE_HEAVY_LLM", "0") == "1":
         return True
-    # Streamlit cloud environment path indicators
-    if "/home/adminuser" in os.path.abspath(__file__) or "STREAMLIT_SERVER" in os.environ:
+
+    # Check container path indicators (/mount/src on Streamlit Cloud)
+    abs_path = os.path.abspath(__file__).replace("\\", "/")
+    if "/mount/src" in abs_path or "/home/adminuser" in abs_path:
         return True
+
+    # Check Streamlit environment variables
+    if any("STREAMLIT" in k for k in os.environ):
+        return True
+
+    # Check total system RAM via /proc/meminfo on Linux
+    try:
+        if os.path.exists("/proc/meminfo"):
+            with open("/proc/meminfo", "r") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        kb = int(line.split()[1])
+                        gb = kb / (1024 * 1024)
+                        if gb < 4.0:  # Streamlit Cloud has ~1GB RAM
+                            return True
+    except Exception:
+        pass
+
     return False
 
 
@@ -62,10 +79,15 @@ def synthesize_extractive_answer(context, query):
     return f"**Summary based on retrieved document context:**\n\n{summary_paragraphs}"
 
 
+_local_tokenizer = None
+_local_model = None
+
+
 def get_local_llm():
     global _local_tokenizer, _local_model
+
     if is_cloud_environment():
-        print("[Generator] Cloud environment detected. Using extractive RAG synthesis to prevent 1GB RAM OOM.")
+        print("[Generator] RAM-constrained cloud environment detected (<4GB). Skipping heavy PyTorch CausalLM to prevent 1GB RAM OOM.")
         return None, None
 
     if _local_model is None:
