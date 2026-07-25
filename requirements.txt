@@ -7,3 +7,6 @@ uvicorn
 streamlit
 requests
 tqdm
+pypdf
+python-docx
+python-dotenv

@@ -1,28 +1,30 @@
-import faiss
-import pickle
-from sentence_transformers import SentenceTransformer
-from config import EMBEDDING_MODEL, TOP_K
-
-model = SentenceTransformer(EMBEDDING_MODEL)
-
-index = faiss.read_index("vectorstore/faiss_index/index.faiss")
-
-with open("vectorstore/faiss_index/chunks.pkl", "rb") as f:
-    chunks = pickle.load(f)
+from config import TOP_K
+from src.ingest import get_embedding_model
+from src.vectorstore import get_vector_store
 
 
-def retrieve(query):
-    query = query.lower().strip()
+def retrieve(query, top_k=TOP_K):
+    """
+    Retrieve top-k relevant document chunks along with source metadata.
+    """
+    query_clean = query.strip()
+    if not query_clean:
+        return []
 
-    # 🔥 Query expansion (VERY IMPORTANT)
-    expanded_query = f"{query}. Explain {query} in machine learning."
+    model = get_embedding_model()
+    query_embedding = model.encode([query_clean], normalize_embeddings=True)
 
-    query_embedding = model.encode(
-    [expanded_query],
-    normalize_embeddings=True
-)
-    distances, indices = index.search(query_embedding, TOP_K)
+    vstore = get_vector_store()
+    results = vstore.search(query_embedding, top_k=top_k)
 
-    results = [chunks[i] for i in indices[0]]
+    formatted_results = []
+    for r in results:
+        meta = r.get("metadata", {})
+        formatted_results.append({
+            "text": r.get("text", ""),
+            "source": meta.get("source", "Unknown Document"),
+            "page": meta.get("page", 1),
+            "score": round(r.get("score", 0.0), 4)
+        })
 
-    return results
+    return formatted_results

@@ -1,41 +1,74 @@
 import os
-import faiss
-import pickle
 from sentence_transformers import SentenceTransformer
-from config import EMBEDDING_MODEL
-from utils import chunk_text
+from config import EMBEDDING_MODEL, CHUNK_SIZE, CHUNK_OVERLAP, DATA_DIR
+from utils import chunk_documents
+from src.parsers import parse_document
+from src.vectorstore import get_vector_store
+
+_embedding_model = None
 
 
-model = SentenceTransformer(EMBEDDING_MODEL)
+def get_embedding_model():
+    global _embedding_model
+    if _embedding_model is None:
+        _embedding_model = SentenceTransformer(EMBEDDING_MODEL)
+    return _embedding_model
 
-docs_path = "data/docs"
-chunks = []
 
-for file in os.listdir(docs_path):
-    file_path = os.path.join(docs_path, file)
+def ingest_file_objects(files):
+    """
+    Ingest user-uploaded file objects dynamically.
+    :param files: list of dicts [{'name': 'doc.pdf', 'content': bytes}]
+    """
+    model = get_embedding_model()
+    all_chunk_records = []
+    processed_files = []
 
-    if file.endswith(".txt"):
-        with open(file_path, "r", encoding="utf-8") as f:
-            text = f.read()
-            chunks.extend(chunk_text(text))
+    for file_info in files:
+        file_name = file_info.get("name", "document.txt")
+        file_bytes = file_info.get("content")
 
-print(f"Total chunks: {len(chunks)}")
+        parsed_blocks = parse_document(file_name, file_bytes)
+        chunk_records = chunk_documents(parsed_blocks, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
+        all_chunk_records.extend(chunk_records)
+        processed_files.append(file_name)
 
-embeddings = model.encode(
-    chunks,
-    normalize_embeddings=True,
-    show_progress_bar=True
-)
+    if not all_chunk_records:
+        return {"status": "error", "message": "No valid text could be extracted from files."}
 
-dimension = embeddings.shape[1]
-index = faiss.IndexFlatIP(dimension)
-index.add(embeddings)
+    texts = [record["text"] for record in all_chunk_records]
+    embeddings = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
 
-os.makedirs("vectorstore/faiss_index", exist_ok=True)
+    vstore = get_vector_store()
+    vstore.add_texts(all_chunk_records, embeddings)
 
-faiss.write_index(index, "vectorstore/faiss_index/index.faiss")
+    return {
+        "status": "success",
+        "processed_files": processed_files,
+        "total_chunks": len(all_chunk_records)
+    }
 
-with open("vectorstore/faiss_index/chunks.pkl", "wb") as f:
-    pickle.dump(chunks, f)
 
-print("✅ FAISS index created successfully")
+def ingest_directory(dir_path=DATA_DIR):
+    """Ingest all technical documents from directory."""
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path, exist_ok=True)
+        return {"status": "warning", "message": f"Directory {dir_path} was empty. Created folder."}
+
+    files = []
+    for file in os.listdir(dir_path):
+        file_path = os.path.join(dir_path, file)
+        if os.path.isfile(file_path):
+            with open(file_path, "rb") as f:
+                files.append({"name": file, "content": f.read()})
+
+    if not files:
+        return {"status": "warning", "message": f"No files found in {dir_path}."}
+
+    return ingest_file_objects(files)
+
+
+if __name__ == "__main__":
+    print("[Ingest] Starting Technical Document Ingestion Pipeline...")
+    res = ingest_directory()
+    print("[Ingest] Result:", res)
