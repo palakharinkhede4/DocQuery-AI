@@ -69,72 +69,74 @@ def generate_answer_groq(context, query, api_key):
 
 def synthesize_extractive_answer(context, query):
     """
-    Question-Aware Smart RAG Synthesizer.
-    Ranks context sentences/bullets based on query overlap and structural relevance.
+    Question-Aware RAG Synthesizer.
+    Preserves complete bullet points and full sentences without mid-phrase chopping.
     """
     if not context or not context.strip():
         return "No relevant information found in the document context."
 
-    # Extract non-header lines
-    lines = [line.strip() for line in context.split("\n") if line.strip() and not line.startswith("[Source:")]
+    # Filter out header source labels
+    raw_lines = [line.strip() for line in context.split("\n") if line.strip() and not line.startswith("[Source:")]
 
-    # Breakdown lines into individual sentences/bullet items
+    if not raw_lines:
+        return "No relevant document text retrieved."
+
+    # Process into distinct structural units (bullet points or paragraphs)
     units = []
-    for line in lines:
-        # Split by bullet points or sentence boundaries
-        bullets = re.split(r'(?=[•\-\*\d+\.])', line)
-        for b in bullets:
-            b_clean = b.strip()
-            if len(b_clean) > 15:
-                units.append(b_clean)
+    for line in raw_lines:
+        # Split on bullet symbols or newlines, NEVER periods
+        bullet_parts = re.split(r'(?=[•\-\*])', line)
+        for part in bullet_parts:
+            cleaned = part.strip()
+            # Ignore truncated fragments (must be complete thoughts > 20 chars)
+            if len(cleaned) > 20 and not re.match(r'^[a-z]{1,3}\s', cleaned):
+                units.append(cleaned)
 
     if not units:
-        return f"Based on retrieved document context:\n\n{context[:300]}..."
+        units = [l for l in raw_lines if len(l) > 15]
 
-    # Tokenize query for relevance scoring
-    query_words = set(re.findall(r'\w+', query.lower())) - {'what', 'is', 'a', 'the', 'does', 'do', 'of', 'in', 'and', 'to', 'for', 'consists', 'consist', 'include'}
+    # Query keywords for scoring
+    query_words = set(re.findall(r'\w+', query.lower())) - {
+        'what', 'is', 'a', 'the', 'does', 'do', 'of', 'in', 'and', 'to', 'for',
+        'consists', 'consist', 'include', 'includes', 'tell', 'me', 'about'
+    }
 
     scored_units = []
     for u in units:
         score = 0
         u_lower = u.lower()
 
-        # Word overlap score
-        for w in query_words:
-            if len(w) > 2 and w in u_lower:
-                score += 3
+        # Score matching query keywords
+        for word in query_words:
+            if len(word) > 2 and word in u_lower:
+                score += 4
 
-        # Boost sentences that contain core structural answer keywords
-        if any(kw in u_lower for kw in ['include', 'component', 'consist', 'comprise', 'system', 'feature', 'contain', 'type', 'process', 'step']):
-            score += 4
+        # High-value technical keywords
+        if any(kw in u_lower for kw in ['include', 'component', 'consist', 'comprise', 'system', 'feature', 'contain', 'type', 'process', 'step', 'roof', 'tank', 'filter']):
+            score += 5
 
-        # Boost bullet points or list structures
-        if u.startswith(('•', '-', '*', '1.', '2.', '3.')):
-            score += 2
-
-        # Penalty for fragmented starting words (e.g. "d be safe for...")
-        if re.match(r'^[a-z]{1,3}\s', u):
-            score -= 2
+        # Boost bullet points
+        if u.startswith(('•', '-', '*')):
+            score += 3
 
         scored_units.append((score, u))
 
-    # Sort units by relevance score descending
+    # Sort descending by score
     scored_units.sort(key=lambda x: x[0], reverse=True)
 
-    # Pick top relevant units (up to 4) preserving original coherence
-    selected = [u for score, u in scored_units[:4] if score >= 0]
-    if not selected:
-        selected = [u for score, u in scored_units[:2]]
+    # Extract top relevant items
+    top_units = [u for score, u in scored_units[:5] if score > 0]
+    if not top_units:
+        top_units = [u for score, u in scored_units[:3]]
 
-    # Format output as clean bullet points or structured text
-    formatted_items = []
-    for item in selected:
-        # Remove bullet prefix if present for clean styling
-        clean_item = re.sub(r'^[•\-\*\d+\.]\s*', '', item)
-        formatted_items.append(f"- {clean_item}")
+    # Format cleanly
+    formatted_lines = []
+    for item in top_units:
+        clean_text = re.sub(r'^[•\-\*]\s*', '', item).strip()
+        formatted_lines.append(f"- {clean_text}")
 
-    formatted_answer = "\n".join(formatted_items)
-    return f"**Key Findings from Retrieved Context:**\n\n{formatted_answer}"
+    output_answer = "\n\n".join(formatted_lines)
+    return f"**Key Information from Document Context:**\n\n{output_answer}"
 
 
 _local_tokenizer = None

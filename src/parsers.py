@@ -5,7 +5,7 @@ import docx
 
 
 def parse_pdf(file_bytes_or_path, file_name="document.pdf"):
-    """Extract text from PDF pages with page metadata."""
+    """Extract text from PDF pages with layout-preserving text extraction."""
     documents = []
 
     if isinstance(file_bytes_or_path, bytes):
@@ -14,7 +14,12 @@ def parse_pdf(file_bytes_or_path, file_name="document.pdf"):
         reader = pypdf.PdfReader(file_bytes_or_path)
 
     for i, page in enumerate(reader.pages):
-        text = page.extract_text() or ""
+        try:
+            # Layout mode preserves bullet points and multi-column alignment
+            text = page.extract_text(extraction_mode="layout") or ""
+        except Exception:
+            text = page.extract_text() or ""
+
         text = text.strip()
         if text:
             documents.append({
@@ -89,5 +94,4 @@ def parse_document(file_name, file_bytes_or_path):
     elif ext in [".txt", ".md", ".csv", ".json", ".log"]:
         return parse_txt(file_bytes_or_path, file_name=file_name)
     else:
-        # Fallback text parsing
         return parse_txt(file_bytes_or_path, file_name=file_name)
