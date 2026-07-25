@@ -1,6 +1,13 @@
+import sys
+import os
+
+# Ensure project root directory is included in sys.path for Streamlit Cloud deployment
+sys_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if sys_root not in sys.path:
+    sys.path.insert(0, sys_root)
+
 import streamlit as st
 import requests
-import os
 
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
