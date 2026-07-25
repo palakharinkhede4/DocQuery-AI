@@ -205,7 +205,7 @@ with tab1:
 
     # Display conversation history with latest question ON TOP
     if st.session_state.chat_history:
-        st.subheader("💡 Q&A History (Latest Question First)")
+        st.subheader("💡 Q&A History")
         for idx, item in enumerate(st.session_state.chat_history):
             with st.container():
                 st.markdown(f"#### ❓ Question #{len(st.session_state.chat_history) - idx}: {item['question']}")

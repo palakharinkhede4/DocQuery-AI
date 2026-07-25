@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from config import LLM_MODEL, MAX_TOKENS
 
@@ -53,7 +54,7 @@ def generate_answer_groq(context, query, api_key):
         messages=[
             {
                 "role": "system",
-                "content": "You are a helpful technical assistant. Answer the user question based ONLY on the provided context."
+                "content": "You are a helpful technical assistant. Answer the user question based ONLY on the provided context. Structure your response clearly with bullet points if listing components."
             },
             {
                 "role": "user",
@@ -68,15 +69,72 @@ def generate_answer_groq(context, query, api_key):
 
 def synthesize_extractive_answer(context, query):
     """
-    High-performance extractive synthesis for RAM-constrained environments.
-    Extracts relevant context sentences directly grounding the answer without OOM crash.
+    Question-Aware Smart RAG Synthesizer.
+    Ranks context sentences/bullets based on query overlap and structural relevance.
     """
-    lines = [line.strip() for line in context.split("\n") if line.strip() and not line.startswith("[Source:")]
-    if not lines:
+    if not context or not context.strip():
         return "No relevant information found in the document context."
 
-    summary_paragraphs = "\n\n".join(lines[:3])
-    return f"**Summary based on retrieved document context:**\n\n{summary_paragraphs}"
+    # Extract non-header lines
+    lines = [line.strip() for line in context.split("\n") if line.strip() and not line.startswith("[Source:")]
+
+    # Breakdown lines into individual sentences/bullet items
+    units = []
+    for line in lines:
+        # Split by bullet points or sentence boundaries
+        bullets = re.split(r'(?=[•\-\*\d+\.])', line)
+        for b in bullets:
+            b_clean = b.strip()
+            if len(b_clean) > 15:
+                units.append(b_clean)
+
+    if not units:
+        return f"Based on retrieved document context:\n\n{context[:300]}..."
+
+    # Tokenize query for relevance scoring
+    query_words = set(re.findall(r'\w+', query.lower())) - {'what', 'is', 'a', 'the', 'does', 'do', 'of', 'in', 'and', 'to', 'for', 'consists', 'consist', 'include'}
+
+    scored_units = []
+    for u in units:
+        score = 0
+        u_lower = u.lower()
+
+        # Word overlap score
+        for w in query_words:
+            if len(w) > 2 and w in u_lower:
+                score += 3
+
+        # Boost sentences that contain core structural answer keywords
+        if any(kw in u_lower for kw in ['include', 'component', 'consist', 'comprise', 'system', 'feature', 'contain', 'type', 'process', 'step']):
+            score += 4
+
+        # Boost bullet points or list structures
+        if u.startswith(('•', '-', '*', '1.', '2.', '3.')):
+            score += 2
+
+        # Penalty for fragmented starting words (e.g. "d be safe for...")
+        if re.match(r'^[a-z]{1,3}\s', u):
+            score -= 2
+
+        scored_units.append((score, u))
+
+    # Sort units by relevance score descending
+    scored_units.sort(key=lambda x: x[0], reverse=True)
+
+    # Pick top relevant units (up to 4) preserving original coherence
+    selected = [u for score, u in scored_units[:4] if score >= 0]
+    if not selected:
+        selected = [u for score, u in scored_units[:2]]
+
+    # Format output as clean bullet points or structured text
+    formatted_items = []
+    for item in selected:
+        # Remove bullet prefix if present for clean styling
+        clean_item = re.sub(r'^[•\-\*\d+\.]\s*', '', item)
+        formatted_items.append(f"- {clean_item}")
+
+    formatted_answer = "\n".join(formatted_items)
+    return f"**Key Findings from Retrieved Context:**\n\n{formatted_answer}"
 
 
 _local_tokenizer = None
@@ -111,7 +169,7 @@ def generate_answer(context, query):
     Generate answer:
     1. Check for API key (Groq) if set in Secrets/Env.
     2. Fallback to Local HuggingFace LLM (on local desktop with ample RAM).
-    3. Fallback to Extractive RAG synthesis (on Streamlit Cloud 1GB RAM container).
+    3. Fallback to Smart Extractive RAG synthesis (on Streamlit Cloud 1GB RAM container).
     """
     if not context or not context.strip():
         return "I don't know based on the provided documents. No relevant context was found."
