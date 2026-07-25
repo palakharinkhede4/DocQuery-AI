@@ -173,73 +173,52 @@ tab1, tab2, tab3 = st.tabs(["💬 Conversational Q&A", "🔍 Semantic Document S
 
 # Tab 1: Chat Interface
 with tab1:
-    # Demo Questions Shortcuts
-    st.caption("💡 **Sample Demo Queries**: ")
-    col1, col2, col3, col4 = st.columns(4)
-    demo_query = None
-    if col1.button("Transformer Architecture"):
-        demo_query = "Explain the Transformer Architecture and multi-head attention."
-    if col2.button("What is RAG?"):
-        demo_query = "What is Retrieval Augmented Generation and vector search?"
-    if col3.button("Gradient Descent"):
-        demo_query = "How does Gradient Descent optimize neural networks?"
-    if col4.button("Overfitting"):
-        demo_query = "What is overfitting and how do regularization techniques help?"
-
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    # Display past conversation
-    for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-            if "sources" in msg and msg["sources"]:
-                with st.expander("📚 View Source Citations & References"):
-                    for src in msg["sources"]:
-                        st.markdown(f"**📄 Document**: `{src['source']}` (Page {src['page']}) | *Match Score: {src['score']}*")
-                        st.caption(f"\"{src['full_text']}\"")
-                        st.divider()
+    # Pinned Question Box at top
+    with st.form(key="qa_form", clear_on_submit=True):
+        user_query = st.text_input("Ask a question about your technical documents:", placeholder="Type your question here...")
+        submit_button = st.form_submit_button("Ask Question 🚀", use_container_width=True)
 
-    # User Query Input
-    user_query = st.chat_input("Ask any question about your technical documents...")
-    query_to_run = user_query or demo_query
+    if submit_button and user_query.strip():
+        with st.spinner("Searching local FAISS index & synthesizing answer..."):
+            try:
+                if health_info:
+                    res = requests.post(f"{API_URL}/ask", json={"query": user_query, "top_k": 4})
+                    response_data = res.json()
+                else:
+                    from src.pipeline import run_pipeline
+                    response_data = run_pipeline(user_query, top_k=4)
 
-    if query_to_run:
-        # Show user message
-        st.session_state.chat_history.append({"role": "user", "content": query_to_run})
-        with st.chat_message("user"):
-            st.markdown(query_to_run)
+                answer = response_data.get("answer", "No response generated.")
+                sources = response_data.get("sources", [])
 
-        # Generate response
-        with st.chat_message("assistant"):
-            with st.spinner("Searching local FAISS index & synthesizing answer..."):
-                try:
-                    if health_info:
-                        res = requests.post(f"{API_URL}/ask", json={"query": query_to_run, "top_k": 4})
-                        response_data = res.json()
-                    else:
-                        from src.pipeline import run_pipeline
-                        response_data = run_pipeline(query_to_run, top_k=4)
+                # Insert newest question at top of history
+                st.session_state.chat_history.insert(0, {
+                    "question": user_query,
+                    "answer": answer,
+                    "sources": sources
+                })
+            except Exception as e:
+                st.error(f"Error executing query: {e}")
 
-                    answer = response_data.get("answer", "No response generated.")
-                    sources = response_data.get("sources", [])
+    # Display conversation history with latest question ON TOP
+    if st.session_state.chat_history:
+        st.subheader("💡 Q&A History (Latest Question First)")
+        for idx, item in enumerate(st.session_state.chat_history):
+            with st.container():
+                st.markdown(f"#### ❓ Question #{len(st.session_state.chat_history) - idx}: {item['question']}")
+                st.markdown(item["answer"])
 
-                    st.markdown(answer)
+                if item.get("sources"):
+                    with st.expander("📚 View Source Citations & References"):
+                        for src in item["sources"]:
+                            st.markdown(f"**📄 Document**: `{src['source']}` (Page {src['page']}) | *Similarity: {src['score']}*")
+                            st.caption(f"\"{src['full_text']}\"")
+                            st.divider()
 
-                    if sources:
-                        with st.expander("📚 View Source Citations & References"):
-                            for src in sources:
-                                st.markdown(f"**📄 Document**: `{src['source']}` (Page {src['page']}) | *Similarity: {src['score']}*")
-                                st.caption(f"\"{src['full_text']}\"")
-                                st.divider()
-
-                    st.session_state.chat_history.append({
-                        "role": "assistant",
-                        "content": answer,
-                        "sources": sources
-                    })
-                except Exception as e:
-                    st.error(f"Error executing query: {e}")
+                st.divider()
 
 # Tab 2: Semantic Document Search Sandbox
 with tab2:
