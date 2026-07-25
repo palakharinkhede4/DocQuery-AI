@@ -9,16 +9,13 @@ def is_cloud_environment():
     if os.getenv("DISABLE_HEAVY_LLM", "0") == "1":
         return True
 
-    # Check container path indicators (/mount/src on Streamlit Cloud)
     abs_path = os.path.abspath(__file__).replace("\\", "/")
     if "/mount/src" in abs_path or "/home/adminuser" in abs_path:
         return True
 
-    # Check Streamlit environment variables
     if any("STREAMLIT" in k for k in os.environ):
         return True
 
-    # Check total system RAM via /proc/meminfo on Linux
     try:
         if os.path.exists("/proc/meminfo"):
             with open("/proc/meminfo", "r") as f:
@@ -26,7 +23,7 @@ def is_cloud_environment():
                     if line.startswith("MemTotal:"):
                         kb = int(line.split()[1])
                         gb = kb / (1024 * 1024)
-                        if gb < 4.0:  # Streamlit Cloud has ~1GB RAM
+                        if gb < 4.0:
                             return True
     except Exception:
         pass
@@ -54,7 +51,7 @@ def generate_answer_groq(context, query, api_key):
         messages=[
             {
                 "role": "system",
-                "content": "You are a helpful technical assistant. Answer the user question based ONLY on the provided context. Structure your response clearly with bullet points if listing components."
+                "content": "You are an expert technical assistant. Synthesize a clean, direct, beautifully structured markdown answer based ONLY on the provided context. Use bold headers and clean bullet points for components."
             },
             {
                 "role": "user",
@@ -62,81 +59,108 @@ def generate_answer_groq(context, query, api_key):
             }
         ],
         max_tokens=MAX_TOKENS,
-        temperature=0.3
+        temperature=0.2
     )
     return response.choices[0].message.content.strip()
 
 
+def clean_text_glitches(text):
+    """Repair PDF OCR / kerning glitches in context string."""
+    glitches = {
+        "r ainw ater": "rainwater",
+        "rainw ater": "rainwater",
+        "collec tion": "collection",
+        "s ystem": "system",
+        "t ypically": "typically",
+        "suppor ts": "supports",
+        "sanitar y": "sanitary",
+        "inspec tion": "inspection",
+        "r un-of f": "run-off",
+        "coef ficient": "coefficient",
+        "over flow": "overflow",
+        "ver min": "vermin",
+        "ventil ation": "ventilation",
+        "ac tivit y": "activity",
+        "oper ation": "operation"
+    }
+    for glitch, fix in glitches.items():
+        text = re.sub(re.escape(glitch), fix, text, flags=re.IGNORECASE)
+
+    # Clean single-letter kerning spaces: 'c ollection' -> 'collection'
+    text = re.sub(r'\b([a-zA-Z])\s+([a-zA-Z]{2,})\b', r'\1\2', text)
+    text = re.sub(r'\b([a-zA-Z]{2,})\s+([a-zA-Z])\b', r'\1\2', text)
+    return text
+
+
 def synthesize_extractive_answer(context, query):
     """
-    Question-Aware RAG Synthesizer.
-    Preserves complete bullet points and full sentences without mid-phrase chopping.
+    Production-Grade RAG Context Synthesizer.
+    Parses definitions, components, and bullet items into a clean structured response.
     """
     if not context or not context.strip():
         return "No relevant information found in the document context."
 
-    # Filter out header source labels
-    raw_lines = [line.strip() for line in context.split("\n") if line.strip() and not line.startswith("[Source:")]
+    context_clean = clean_text_glitches(context)
 
-    if not raw_lines:
-        return "No relevant document text retrieved."
+    # Extract non-header lines
+    lines = [line.strip() for line in context_clean.split("\n") if line.strip() and not line.startswith("[Source:")]
 
-    # Process into distinct structural units (bullet points or paragraphs)
-    units = []
-    for line in raw_lines:
-        # Split on bullet symbols or newlines, NEVER periods
-        bullet_parts = re.split(r'(?=[•\-\*])', line)
-        for part in bullet_parts:
-            cleaned = part.strip()
-            # Ignore truncated fragments (must be complete thoughts > 20 chars)
-            if len(cleaned) > 20 and not re.match(r'^[a-z]{1,3}\s', cleaned):
-                units.append(cleaned)
+    # Find overview/definition sentences
+    overviews = []
+    bullets = []
 
-    if not units:
-        units = [l for l in raw_lines if len(l) > 15]
+    for line in lines:
+        l_lower = line.lower()
+        if any(kw in l_lower for kw in ["consists of", "typically include", "comprises", "is defined as"]):
+            # Clean overview phrase
+            clean_l = re.sub(r'^[•\-\*]\s*', '', line).strip()
+            if len(clean_l) > 20:
+                overviews.append(clean_l)
 
-    # Query keywords for scoring
-    query_words = set(re.findall(r'\w+', query.lower())) - {
-        'what', 'is', 'a', 'the', 'does', 'do', 'of', 'in', 'and', 'to', 'for',
-        'consists', 'consist', 'include', 'includes', 'tell', 'me', 'about'
-    }
+        # Detect bullet list items
+        if line.startswith(('•', '-', '*')) or re.match(r'^[A-Z][a-z\s]+:', line):
+            clean_b = re.sub(r'^[•\-\*]\s*', '', line).strip()
+            if len(clean_b) > 15:
+                bullets.append(clean_b)
 
-    scored_units = []
-    for u in units:
-        score = 0
-        u_lower = u.lower()
+    # Assemble response sections
+    response_sections = []
 
-        # Score matching query keywords
-        for word in query_words:
-            if len(word) > 2 and word in u_lower:
-                score += 4
+    # 1. Overview Section
+    if overviews:
+        best_overview = overviews[0]
+        response_sections.append(f"**Overview:**\n{best_overview}")
+    else:
+        # Fallback first meaningful sentence
+        first_line = next((l for l in lines if len(l) > 30), None)
+        if first_line:
+            response_sections.append(f"**Overview:**\n{first_line}")
 
-        # High-value technical keywords
-        if any(kw in u_lower for kw in ['include', 'component', 'consist', 'comprise', 'system', 'feature', 'contain', 'type', 'process', 'step', 'roof', 'tank', 'filter']):
-            score += 5
+    # 2. Key Components / System Elements Section
+    if bullets:
+        formatted_bullets = []
+        seen = set()
+        for b in bullets[:8]:  # Top 8 components
+            # Format bold component headers if colon present e.g. "Roof (catchment area): Details"
+            if ":" in b and not b.startswith("http"):
+                parts = b.split(":", 1)
+                comp_name = parts[0].strip()
+                comp_desc = parts[1].strip()
+                if comp_name not in seen:
+                    seen.add(comp_name)
+                    formatted_bullets.append(f"- **{comp_name}**: {comp_desc}")
+            else:
+                if b[:40] not in seen:
+                    seen.add(b[:40])
+                    formatted_bullets.append(f"- {b}")
 
-        # Boost bullet points
-        if u.startswith(('•', '-', '*')):
-            score += 3
+        if formatted_bullets:
+            response_sections.append("**System Components & Details:**\n" + "\n".join(formatted_bullets))
 
-        scored_units.append((score, u))
+    if not response_sections:
+        response_sections.append(f"**Extracted Technical Summary:**\n" + "\n".join([f"- {l}" for l in lines[:4]]))
 
-    # Sort descending by score
-    scored_units.sort(key=lambda x: x[0], reverse=True)
-
-    # Extract top relevant items
-    top_units = [u for score, u in scored_units[:5] if score > 0]
-    if not top_units:
-        top_units = [u for score, u in scored_units[:3]]
-
-    # Format cleanly
-    formatted_lines = []
-    for item in top_units:
-        clean_text = re.sub(r'^[•\-\*]\s*', '', item).strip()
-        formatted_lines.append(f"- {clean_text}")
-
-    output_answer = "\n\n".join(formatted_lines)
-    return f"**Key Information from Document Context:**\n\n{output_answer}"
+    return "\n\n".join(response_sections)
 
 
 _local_tokenizer = None
@@ -171,7 +195,7 @@ def generate_answer(context, query):
     Generate answer:
     1. Check for API key (Groq) if set in Secrets/Env.
     2. Fallback to Local HuggingFace LLM (on local desktop with ample RAM).
-    3. Fallback to Smart Extractive RAG synthesis (on Streamlit Cloud 1GB RAM container).
+    3. Fallback to Production-Grade RAG Synthesizer (on Streamlit Cloud 1GB RAM container).
     """
     if not context or not context.strip():
         return "I don't know based on the provided documents. No relevant context was found."

@@ -1,11 +1,63 @@
 import io
 import os
+import re
 import pypdf
 import docx
 
 
+def clean_pdf_text(text):
+    """
+    Clean up PDF font ligature and kerning artifacts.
+    Fixes broken words like 'r ainw ater' -> 'rainwater', 'collec tion' -> 'collection'.
+    """
+    if not text:
+        return ""
+
+    # Replace common broken font kerning patterns (single letter followed by space inside words)
+    # e.g., 'r ainw ater' -> 'rainwater', 's ystem' -> 'system', 't ypically' -> 'typically'
+    text = re.sub(r'\b([a-zA-Z])\s+([a-zA-Z]{2,})\b', r'\1\2', text)
+    text = re.sub(r'\b([a-zA-Z]{2,})\s+([a-zA-Z])\b', r'\1\2', text)
+    
+    # Fix specific recurring PDF OCR / kerning glitches
+    glitches = {
+        "r ainw ater": "rainwater",
+        "rainw ater": "rainwater",
+        "collec tion": "collection",
+        "s ystem": "system",
+        "t ypically": "typically",
+        "suppor ts": "supports",
+        "sanitar y": "sanitary",
+        "inspec tion": "inspection",
+        "r un-of f": "run-off",
+        "coef ficient": "coefficient",
+        "over flow": "overflow",
+        "ver min": "vermin",
+        "ventil ation": "ventilation",
+        "ac tivit y": "activity",
+        "oper ation": "operation",
+        "distr ic t": "district",
+        "prov ince": "province",
+        "v ill age": "village",
+        "par ish": "parish",
+        "descr ibe": "describe",
+        "af fec ted": "affected",
+        "r ainfall": "rainfall",
+        "gut ter": "gutter",
+        "gut ter ing": "guttering"
+    }
+
+    for glitch, fix in glitches.items():
+        text = re.sub(re.escape(glitch), fix, text, flags=re.IGNORECASE)
+
+    # Clean excessive whitespace
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r'\n\s*\n+', '\n\n', text)
+
+    return text.strip()
+
+
 def parse_pdf(file_bytes_or_path, file_name="document.pdf"):
-    """Extract text from PDF pages with layout-preserving text extraction."""
+    """Extract text from PDF pages with clean text repair."""
     documents = []
 
     if isinstance(file_bytes_or_path, bytes):
@@ -15,12 +67,12 @@ def parse_pdf(file_bytes_or_path, file_name="document.pdf"):
 
     for i, page in enumerate(reader.pages):
         try:
-            # Layout mode preserves bullet points and multi-column alignment
-            text = page.extract_text(extraction_mode="layout") or ""
-        except Exception:
             text = page.extract_text() or ""
+        except Exception:
+            text = ""
 
-        text = text.strip()
+        text = clean_pdf_text(text)
+
         if text:
             documents.append({
                 "text": text,
