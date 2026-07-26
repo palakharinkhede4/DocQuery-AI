@@ -1,18 +1,17 @@
-# Local RAG System for Technical Document QnA
+# Technical Document Q&A RAG System
 
 ## 🚀 Overview
-A local Retrieval-Augmented Generation (RAG) system that allows users to query technical documents using semantic search and a local LLM.
+A Retrieval-Augmented Generation (RAG) system that allows users to query technical documents using FAISS semantic vector search and Google Gemini LLM generation.
 
 ## 🧠 Features
-- Document chunking
-- FAISS-based vector search
-- Sentence-transformer embeddings
-- Local LLM (TinyLlama)
-- FastAPI backend
-- Streamlit frontend
+- Session-isolated document parsing & chunking
+- FAISS-based vector search with BGE embeddings
+- LLM Integration (Google Gemini Flash / Groq / Fallback)
+- Interactive document upload & progress tracking
+- FastAPI backend & Streamlit frontend
 
 ## 🏗️ Architecture
-User Query → Retriever (FAISS) → Relevant Chunks → LLM → Answer
+User Query → Retriever (FAISS) → Relevant Chunks → LLM Engine (Gemini) → Answer
 
 ## ⚙️ Setup
 

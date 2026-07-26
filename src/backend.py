@@ -7,8 +7,8 @@ from src.ingest import ingest_file_objects, ingest_directory
 from src.vectorstore import get_vector_store, clear_session_store
 
 app = FastAPI(
-    title="Local Technical Document Q&A RAG API",
-    description="100% Local & Privacy-Preserving Session-Isolated RAG API with FAISS Vector Search",
+    title="Technical Document Q&A RAG API",
+    description="Privacy-Preserving Session-Isolated RAG API with FAISS Vector Search & LLM Engine",
     version="2.0.0"
 )
 
@@ -30,7 +30,7 @@ class QueryRequest(BaseModel):
 @app.get("/")
 def home():
     return {
-        "message": "Local RAG API running 🚀 (100% Offline & Session-Isolated)",
+        "message": "Technical RAG API running 🚀 (Session-Isolated)",
         "vector_store": "FAISS",
         "docs_url": "/docs"
     }
@@ -43,7 +43,7 @@ def health_check(session_id: Optional[str] = "default_session"):
     return {
         "status": "healthy",
         "vector_store_type": "FAISS",
-        "mode": "100% Local & Offline",
+        "mode": "Session-Isolated RAG (FAISS + LLM)",
         "session_id": session_id,
         "stats": doc_stats
     }

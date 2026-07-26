@@ -80,7 +80,7 @@ with st.sidebar:
     st.markdown("""
     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
         <span style="font-size: 2.2rem;">📚</span>
-        <h2 style="margin: 0; padding: 0; font-size: 1.4rem; font-weight: 700; color: #F1F5F9;">Local Knowledge Base</h2>
+        <h2 style="margin: 0; padding: 0; font-size: 1.4rem; font-weight: 700; color: #F1F5F9;">Technical Knowledge Base</h2>
     </div>
     """, unsafe_allow_html=True)
     st.caption(f"Session ID: `{session_id}`")
@@ -89,7 +89,7 @@ with st.sidebar:
     if health_info:
         st.markdown("Status: 🟢 **Connected**", unsafe_allow_html=True)
         st.markdown("Vector Store: <span class='badge-faiss'>FAISS (Session Isolated)</span>", unsafe_allow_html=True)
-        st.markdown("Mode: <span class='badge-local'>100% Offline / Private</span>", unsafe_allow_html=True)
+        st.markdown("LLM Engine: <span class='badge-local'>Gemini Flash / LLM API</span>", unsafe_allow_html=True)
     else:
         st.info("ℹ️ Direct Session Mode (FAISS Isolated)")
 
@@ -198,8 +198,8 @@ with st.sidebar:
 
 
 # Main Header
-st.markdown("<div class='main-header'>🔒 Local Technical Document Q&A System</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-header'>100% Private, Session-Isolated RAG powered by FAISS & Local LLM</div>", unsafe_allow_html=True)
+st.markdown("<div class='main-header'>🔒 Technical Document Q&A System</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-header'>Session-Isolated RAG powered by FAISS Vector Search & LLM Engine</div>", unsafe_allow_html=True)
 
 # Tabs
 tab1, tab2, tab3 = st.tabs(["💬 Conversational Q&A", "🔍 Semantic Document Search", "⚙️ Architecture"])
@@ -277,7 +277,7 @@ with tab2:
 
 # Tab 3: System Architecture
 with tab3:
-    st.subheader("🏗️ 100% Session-Isolated RAG Architecture")
+    st.subheader("🏗️ Session-Isolated RAG Architecture")
     st.markdown("""
     ### Privacy & Isolation Features
 
@@ -289,8 +289,8 @@ with tab3:
                                                                     │
                                                                     ▼
     ┌────────────────┐       ┌─────────────────┐       ┌────────────────────────┐
-    │ Streamlit UI / │ <──── │ Local LLM       │ <──── │ Isolated Session FAISS │
-    │ FastAPI Backend│       │ (Extractive RAG)│       │ (vectorstore/session)  │
+    │ Streamlit UI / │ <──── │ LLM Engine      │ <──── │ Isolated Session FAISS │
+    │ FastAPI Backend│       │ (Gemini / RAG)  │       │ (vectorstore/session)  │
     └────────────────┘       └─────────────────┘       └────────────────────────┘
     ```
 

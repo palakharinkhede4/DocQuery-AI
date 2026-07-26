@@ -6,7 +6,7 @@ load_dotenv()
 # Absolute base directory of the project
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-# Embedding & Local LLM Configurations (100% Local & Offline)
+# Embedding & LLM Configurations (FAISS Vector Store & Gemini LLM)
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 LLM_MODEL = os.getenv("LLM_MODEL", "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 
@@ -14,7 +14,7 @@ LLM_MODEL = os.getenv("LLM_MODEL", "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 1200))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 200))
 TOP_K = int(os.getenv("TOP_K", 4))
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", 250))
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", 800))
 
 # Absolute Paths
 DATA_DIR = os.getenv("DATA_DIR", os.path.join(BASE_DIR, "data", "docs"))

@@ -71,7 +71,7 @@ def get_api_key(key_name):
 
 def generate_answer_gemini(context, query, api_key):
     """
-    Generate a concise, highly focused, beautifully structured Markdown response using Google Gemini API.
+    Generate a thorough, complete, beautifully structured Markdown response using Google Gemini API.
     """
     models_to_try = [
         "gemini-2.5-flash",
@@ -82,13 +82,14 @@ def generate_answer_gemini(context, query, api_key):
     ]
 
     system_instruction = (
-        "You are a precise, highly focused technical AI assistant.\n"
-        "Your task is to provide a CONCISE, direct, and focused answer to the user's question using ONLY the provided document context.\n\n"
-        "Strict Formatting & Content Guidelines:\n"
-        "1. STRICT CONCISENESS & FOCUS: Answer ONLY the specific question asked. Keep answers brief (1-2 short paragraphs or clean bullet points). Do NOT include adjacent topics, tangential concepts, or unrelated sections (e.g., if asked 'what is polymorphism', explain ONLY polymorphism; do NOT include separate sections for Dynamic Binding, Abstraction, Encapsulation, or Syllabus unless explicitly asked).\n"
-        "2. NO METADATA/HEADER REPETITION: Do NOT repeat raw page numbers, OCR artifact tags (like /H17040 or ■ 267), or raw document source headers.\n"
-        "3. STRUCTURE: Use clear, clean formatting with bold terms and short bullet points.\n"
-        "4. MISSING INFO: If the provided context does NOT contain enough information to answer the question, state ONLY: "
+        "You are an expert technical AI assistant.\n"
+        "Your task is to provide a thorough, complete, and clear answer to the user's specific question using ONLY the provided document context.\n\n"
+        "Formatting & Content Guidelines:\n"
+        "1. FOCUSED & THOROUGH EXPLANATION: Explain the concept in full, clear detail. Provide comprehensive explanations, key characteristics, and code snippets if present in the context.\n"
+        "2. STRICT TOPIC FOCUS: Focus strictly on the question asked. Do NOT create separate sections for unrelated adjacent topics found in the context (e.g., if asked 'what is polymorphism', explain polymorphism thoroughly, but do NOT add extra sections for Dynamic Binding, Abstraction, or Syllabus unless explicitly asked).\n"
+        "3. NO METADATA/HEADER REPETITION: Do NOT repeat raw page numbers, OCR artifact tags (like /H17040 or ■ 267), or raw document source headers.\n"
+        "4. STRUCTURE: Use clear, clean Markdown formatting with bold headers, bullet points, and code blocks for readability.\n"
+        "5. MISSING INFO: If the provided context does NOT contain enough information to answer the question, state ONLY: "
         "'Based on the provided documents, I could not find sufficient information to answer your question.'"
     )
 
@@ -105,7 +106,7 @@ def generate_answer_gemini(context, query, api_key):
         ],
         "generationConfig": {
             "temperature": 0.2,
-            "maxOutputTokens": 400
+            "maxOutputTokens": 800
         }
     }
 
@@ -135,7 +136,7 @@ def generate_answer_gemini(context, query, api_key):
                     ],
                     "generationConfig": {
                         "temperature": 0.2,
-                        "maxOutputTokens": 400
+                        "maxOutputTokens": 800
                     }
                 }
                 res_fb = requests.post(url, headers=headers, json=fallback_payload, timeout=15)
