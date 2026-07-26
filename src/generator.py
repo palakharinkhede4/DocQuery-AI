@@ -75,9 +75,9 @@ def generate_answer_gemini(context, query, api_key):
     """
     models_to_try = [
         "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
         "gemini-2.5-flash-lite",
-        "gemini-1.5-flash-lite",
-        "gemini-flash-lite"
+        "gemini-2.5-flash"
     ]
 
     system_instruction = (
