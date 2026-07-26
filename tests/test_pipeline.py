@@ -57,6 +57,13 @@ class TestLocalRAGPipeline(unittest.TestCase):
         self.assertEqual(blocks[0]["metadata"]["source"], "cpp_reference.pdf")
         self.assertIn("C++ Reference Manual", blocks[0]["text"])
 
+    def test_generator_gemini_key_resolution(self):
+        import os
+        from src.generator import get_api_key
+        os.environ["GEMINI_API_KEY"] = "test_gemini_key_123"
+        self.assertEqual(get_api_key("GEMINI_API_KEY"), "test_gemini_key_123")
+        del os.environ["GEMINI_API_KEY"]
+
 
 if __name__ == "__main__":
     unittest.main()

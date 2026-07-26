@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import requests
 from config import LLM_MODEL, MAX_TOKENS
 
 
@@ -33,14 +34,124 @@ def is_cloud_environment():
 
 def get_api_key(key_name):
     """Fetch API key from environment variables or Streamlit secrets if available."""
-    val = os.getenv(key_name, "")
-    if not val:
+    target_names = [key_name, key_name.upper(), key_name.lower()]
+    if key_name.upper() in ["GEMINI_API_KEY", "GOOGLE_API_KEY"]:
+        target_names.extend(["GEMINI_API_KEY", "gemini_api_key", "GOOGLE_API_KEY", "google_api_key"])
+
+    # 1. Environment variables
+    for name in target_names:
+        val = os.getenv(name, "")
+        if val:
+            return val
+
+    # 2. Streamlit secrets
+    try:
+        import streamlit as st
+        for name in target_names:
+            if name in st.secrets:
+                val = st.secrets[name]
+                if val:
+                    return str(val)
+    except Exception:
+        pass
+
+    # 3. .env file
+    try:
+        from dotenv import load_dotenv, find_dotenv
+        load_dotenv(find_dotenv(), override=False)
+        for name in target_names:
+            val = os.getenv(name, "")
+            if val:
+                return val
+    except Exception:
+        pass
+
+    return ""
+
+
+def generate_answer_gemini(context, query, api_key):
+    """
+    Generate a high-quality, beautifully structured Markdown response using Google Gemini API.
+    """
+    models_to_try = [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-pro"
+    ]
+
+    system_instruction = (
+        "You are an expert technical assistant. Synthesize a clean, direct, beautifully structured "
+        "markdown answer to the user's question using ONLY the provided document context.\n"
+        "Rules:\n"
+        "- Explain technical concepts clearly using bold headers, code snippets, and bullet points where helpful.\n"
+        "- Do NOT repeat raw metadata tags, page markers (like /H17040 or ■ 267), or raw context headers inside your answer body.\n"
+        "- If the provided context does not contain enough information to answer the question, state: "
+        "'Based on the provided documents, I could not find sufficient information to answer your question.'"
+    )
+
+    prompt = f"Context:\n{context}\n\nQuestion: {query}"
+
+    payload = {
+        "systemInstruction": {
+            "parts": [{"text": system_instruction}]
+        },
+        "contents": [
+            {
+                "parts": [{"text": prompt}]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": MAX_TOKENS
+        }
+    }
+
+    headers = {"Content-Type": "application/json"}
+    last_error = None
+
+    for model in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         try:
-            import streamlit as st
-            val = st.secrets.get(key_name, "")
-        except Exception:
-            pass
-    return val
+            res = requests.post(url, headers=headers, json=payload, timeout=15)
+            if res.status_code == 200:
+                data = res.json()
+                candidates = data.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts and "text" in parts[0]:
+                        ans = parts[0]["text"].strip()
+                        if ans:
+                            return ans
+            else:
+                # Fallback payload without separate systemInstruction object for older endpoints
+                fallback_payload = {
+                    "contents": [
+                        {
+                            "parts": [{"text": f"{system_instruction}\n\n{prompt}"}]
+                        }
+                    ],
+                    "generationConfig": {
+                        "temperature": 0.2,
+                        "maxOutputTokens": MAX_TOKENS
+                    }
+                }
+                res_fb = requests.post(url, headers=headers, json=fallback_payload, timeout=15)
+                if res_fb.status_code == 200:
+                    data = res_fb.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts and "text" in parts[0]:
+                            ans = parts[0]["text"].strip()
+                            if ans:
+                                return ans
+                last_error = f"HTTP {res.status_code}: {res.text}"
+        except Exception as e:
+            last_error = str(e)
+
+    raise RuntimeError(f"Gemini API error across models: {last_error}")
 
 
 def generate_answer_groq(context, query, api_key):
@@ -65,9 +176,13 @@ def generate_answer_groq(context, query, api_key):
 
 
 def clean_text_glitches(text):
-    """Repair PDF OCR / kerning glitches and footnote superscripts."""
+    """Repair PDF OCR / kerning glitches, structural tags, and footnote superscripts."""
     if not text:
         return ""
+
+    # Clean PDF structural header tags and page number glitches like '/H17040' or '■ 487'
+    text = re.sub(r'/H\d+', '', text)
+    text = re.sub(r'■\s*\d+', '', text)
 
     glitches = {
         "r ainw ater": "rainwater",
@@ -250,14 +365,23 @@ def get_local_llm():
 def generate_answer(context, query):
     """
     Generate answer:
-    1. Check for API key (Groq) if set in Secrets/Env.
-    2. Fallback to Local HuggingFace LLM (on local desktop with ample RAM).
-    3. Fallback to Production-Grade RAG Synthesizer (on Streamlit Cloud 1GB RAM container).
+    1. Check for Gemini API key (GEMINI_API_KEY / GOOGLE_API_KEY) if set in Secrets/Env.
+    2. Check for optional Groq API key if set in Secrets/Env.
+    3. Fallback to Local HuggingFace LLM (on local desktop with ample RAM).
+    4. Fallback to Production-Grade RAG Synthesizer (on Streamlit Cloud 1GB RAM container).
     """
     if not context or not context.strip():
         return "I don't know based on the provided documents. No relevant context was found."
 
-    # Check for optional Groq API key in secrets/env
+    # 1. Primary High-Performance Model: Gemini API
+    gemini_key = get_api_key("GEMINI_API_KEY")
+    if gemini_key:
+        try:
+            return generate_answer_gemini(context, query, gemini_key)
+        except Exception as e:
+            print(f"Gemini API error ({e}). Falling back to secondary LLM pipelines.")
+
+    # 2. Secondary Model: Groq API
     groq_key = get_api_key("GROQ_API_KEY")
     if groq_key:
         try:

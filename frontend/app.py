@@ -77,8 +77,12 @@ health_info = check_backend()
 
 # Sidebar: Document Management & Config
 with st.sidebar:
-    st.image("https://img.icons8.com/isometric-folders/100/database.png", width=60)
-    st.title("Local Knowledge Base")
+    st.markdown("""
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+        <span style="font-size: 2.2rem;">📚</span>
+        <h2 style="margin: 0; padding: 0; font-size: 1.4rem; font-weight: 700; color: #F1F5F9;">Local Knowledge Base</h2>
+    </div>
+    """, unsafe_allow_html=True)
     st.caption(f"Session ID: `{session_id}`")
 
     # Backend Connection Status
@@ -101,39 +105,56 @@ with st.sidebar:
 
     if uploaded_files:
         if st.button("🚀 Process Uploaded Files", use_container_width=True):
-            with st.spinner("Parsing text, generating local embeddings & indexing..."):
-                files_payload = []
-                for file in uploaded_files:
-                    files_payload.append(("files", (file.name, file.getvalue(), file.type)))
+            progress_bar = st.progress(0, text="Initializing document processing...")
 
-                try:
-                    if health_info:
-                        res = requests.post(f"{API_URL}/upload?session_id={session_id}", files=files_payload)
-                        data = res.json()
-                        st.success(f"✅ Ingested {data.get('total_chunks', 0)} chunks across {len(data.get('processed_files', []))} document(s)!")
-                    else:
-                        from src.ingest import ingest_file_objects
-                        file_objs = [{"name": f.name, "content": f.getvalue()} for f in uploaded_files]
-                        data = ingest_file_objects(file_objs, session_id=session_id)
-                        st.success(f"✅ Ingested {data.get('total_chunks', 0)} chunks locally!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Failed to ingest: {e}")
+            def update_upload_progress(pct, msg):
+                val = min(max(float(pct), 0.0), 1.0)
+                progress_bar.progress(val, text=f"{int(val * 100)}% — {msg}")
+
+            files_payload = []
+            file_objs = []
+            for file in uploaded_files:
+                f_bytes = file.getvalue()
+                files_payload.append(("files", (file.name, f_bytes, file.type)))
+                file_objs.append({"name": file.name, "content": f_bytes})
+
+            try:
+                if health_info:
+                    update_upload_progress(0.2, "Uploading files to FastAPI backend...")
+                    res = requests.post(f"{API_URL}/upload?session_id={session_id}", files=files_payload)
+                    data = res.json()
+                    update_upload_progress(1.0, f"✅ Ingested {data.get('total_chunks', 0)} chunks across {len(data.get('processed_files', []))} document(s)!")
+                else:
+                    from src.ingest import ingest_file_objects
+                    data = ingest_file_objects(file_objs, session_id=session_id, progress_callback=update_upload_progress)
+
+                st.success(f"✅ Ingested {data.get('total_chunks', 0)} chunks!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to ingest: {e}")
 
     # Demo Documents Button
     if st.button("⚡ Load Demo Docs (12 Tech Topics)", type="primary", use_container_width=True):
-        with st.spinner("Loading pre-loaded 12 technical documents for this session..."):
-            try:
-                if health_info:
-                    res = requests.post(f"{API_URL}/ingest-demo?session_id={session_id}")
-                    data = res.json()
-                else:
-                    from src.ingest import ingest_directory
-                    data = ingest_directory(session_id=session_id)
-                st.success(f"✅ Ingested {data.get('total_chunks', 0)} chunks from 12 Demo Tech Docs!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Failed to load demo docs: {e}")
+        progress_bar = st.progress(0, text="Loading 12 technical demo documents...")
+
+        def update_demo_progress(pct, msg):
+            val = min(max(float(pct), 0.0), 1.0)
+            progress_bar.progress(val, text=f"{int(val * 100)}% — {msg}")
+
+        try:
+            if health_info:
+                update_demo_progress(0.3, "Requesting backend demo document ingestion...")
+                res = requests.post(f"{API_URL}/ingest-demo?session_id={session_id}")
+                data = res.json()
+                update_demo_progress(1.0, "Demo docs ingested!")
+            else:
+                from src.ingest import ingest_directory
+                data = ingest_directory(session_id=session_id, progress_callback=update_demo_progress)
+
+            st.success(f"✅ Ingested {data.get('total_chunks', 0)} chunks from 12 Demo Tech Docs!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Failed to load demo docs: {e}")
 
     st.divider()
 
