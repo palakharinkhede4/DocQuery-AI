@@ -8,7 +8,7 @@ from src.vectorstore import get_vector_store, clear_session_store
 
 app = FastAPI(
     title="DocQuery AI API",
-    description="Privacy-Preserving Session-Isolated Document Intelligence RAG API with FAISS & Gemini Flash AI",
+    description="Privacy-Preserving Session-Isolated Document Intelligence RAG API with FAISS & Gemini 3.5 Flash Lite",
     version="2.0.0"
 )
 

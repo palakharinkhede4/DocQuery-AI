@@ -6,9 +6,9 @@ load_dotenv()
 # Absolute base directory of the project
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-# Embedding & LLM Configurations (FAISS Vector Store & Gemini LLM)
+# Embedding & LLM Configurations (FAISS Vector Store & Gemini 3.5 Flash Lite)
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-LLM_MODEL = os.getenv("LLM_MODEL", "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+LLM_MODEL = os.getenv("LLM_MODEL", "gemini-3.5-flash-lite")
 
 # Chunking & Retrieval Parameters (Increased chunk size to 1200 for lists & general documents)
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 1200))

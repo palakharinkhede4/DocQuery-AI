@@ -71,14 +71,13 @@ def get_api_key(key_name):
 
 def generate_answer_gemini(context, query, api_key):
     """
-    Generate a thorough, complete, beautifully structured Markdown response using Google Gemini API.
+    Generate a thorough, complete, beautifully structured Markdown response using Gemini 3.5 Flash Lite API.
     """
     models_to_try = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-        "gemini-pro"
+        "gemini-3.5-flash-lite",
+        "gemini-2.5-flash-lite",
+        "gemini-1.5-flash-lite",
+        "gemini-flash-lite"
     ]
 
     system_instruction = (

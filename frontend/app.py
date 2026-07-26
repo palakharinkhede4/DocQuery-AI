@@ -128,7 +128,7 @@ with st.sidebar:
         st.markdown("Backend API: **Direct Session Mode**", unsafe_allow_html=True)
 
     st.markdown("Vector Store: <span class='badge-faiss'>FAISS Index</span>", unsafe_allow_html=True)
-    st.markdown("LLM Engine: <span class='badge-llm'>Gemini Flash AI</span>", unsafe_allow_html=True)
+    st.markdown("LLM Engine: <span class='badge-llm'>Gemini 3.5 Flash Lite</span>", unsafe_allow_html=True)
 
     st.divider()
 
@@ -163,7 +163,7 @@ with st.sidebar:
 
 # Main Header
 st.markdown("<div class='brand-title'>DocQuery AI</div>", unsafe_allow_html=True)
-st.markdown("<div class='brand-subtitle'>Session-isolated document analysis & question answering powered by FAISS and Gemini Flash AI</div>", unsafe_allow_html=True)
+st.markdown("<div class='brand-subtitle'>Session-isolated document analysis & question answering powered by FAISS and Gemini 3.5 Flash Lite</div>", unsafe_allow_html=True)
 
 # Main Hero / Document Workspace
 if total_chunks == 0:
@@ -327,8 +327,8 @@ with st.expander("System Architecture & Privacy Specifications"):
                                                                     │
                                                                     ▼
     ┌────────────────┐       ┌─────────────────┐       ┌────────────────────────┐
-    │ Streamlit UI / │ <──── │ Gemini Flash AI │ <──── │ Isolated Session FAISS │
-    │ FastAPI Backend│       │ (LLM Synthesis) │       │ (vectorstore/session)  │
+    │ Streamlit UI / │ <──── │ Gemini 3.5 Flash│ <──── │ Isolated Session FAISS │
+    │ FastAPI Backend│       │ (Lite Engine)   │       │ (vectorstore/session)  │
     └────────────────┘       └─────────────────┘       └────────────────────────┘
     ```
 
