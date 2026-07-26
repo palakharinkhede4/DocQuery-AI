@@ -41,6 +41,22 @@ class TestLocalRAGPipeline(unittest.TestCase):
         # Clean up test session store
         clear_session_store(test_session)
 
+    def test_corrupt_pdf_resilience(self):
+        corrupt_pdf_bytes = (
+            b"%PDF-1.5\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+            b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+            b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>\nendobj\n"
+            b"4 0 obj\n<< /Length 44 >>\nstream\n"
+            b"00 250 444 500 444 5\x00\x00\x00\x00\x00(C++ Reference Manual for Data Structures) TJ\x00\x00\x00\x00\x00\n"
+            b"endstream\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n"
+            b"0000000056 00000 n \n0000000114 00000 n \n0000000213 00000 n \ntrailer\n"
+            b"<< /Size 5 /Root 1 0 R >>\nstartxref\n320\n%%EOF"
+        )
+        blocks = parse_document("cpp_reference.pdf", corrupt_pdf_bytes)
+        self.assertGreaterEqual(len(blocks), 1)
+        self.assertEqual(blocks[0]["metadata"]["source"], "cpp_reference.pdf")
+        self.assertIn("C++ Reference Manual", blocks[0]["text"])
+
 
 if __name__ == "__main__":
     unittest.main()
