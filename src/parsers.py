@@ -1,8 +1,22 @@
 import io
 import os
 import re
+import logging
+import contextlib
 import pypdf
 import docx
+
+
+@contextlib.contextmanager
+def suppress_pypdf_logs():
+    """Suppress noisy pypdf stdout/stderr warnings for corrupted PDF streams."""
+    logging.getLogger("pypdf").setLevel(logging.CRITICAL)
+    devnull = open(os.devnull, "w")
+    try:
+        with contextlib.redirect_stderr(devnull), contextlib.redirect_stdout(devnull):
+            yield
+    finally:
+        devnull.close()
 
 
 def clean_pdf_text(text):
@@ -130,35 +144,36 @@ def parse_pdf(file_bytes_or_path, file_name="document.pdf"):
     documents = []
 
     try:
-        if isinstance(file_bytes_or_path, bytes):
-            reader = pypdf.PdfReader(io.BytesIO(file_bytes_or_path), strict=False)
-        else:
-            reader = pypdf.PdfReader(file_bytes_or_path, strict=False)
+        with suppress_pypdf_logs():
+            if isinstance(file_bytes_or_path, bytes):
+                reader = pypdf.PdfReader(io.BytesIO(file_bytes_or_path), strict=False)
+            else:
+                reader = pypdf.PdfReader(file_bytes_or_path, strict=False)
 
-        try:
-            num_pages = len(reader.pages)
-        except Exception:
-            num_pages = 0
-
-        for i in range(num_pages):
             try:
-                page = reader.pages[i]
-                text = page.extract_text() or ""
+                num_pages = len(reader.pages)
             except Exception:
-                text = ""
+                num_pages = 0
 
-            text = clean_pdf_text(text)
+            for i in range(num_pages):
+                try:
+                    page = reader.pages[i]
+                    text = page.extract_text() or ""
+                except Exception:
+                    text = ""
 
-            if text:
-                documents.append({
-                    "text": text,
-                    "metadata": {
-                        "source": file_name,
-                        "page": i + 1
-                    }
-                })
-    except Exception as e:
-        print(f"[parse_pdf] pypdf failed to parse '{file_name}': {e}")
+                text = clean_pdf_text(text)
+
+                if text:
+                    documents.append({
+                        "text": text,
+                        "metadata": {
+                            "source": file_name,
+                            "page": i + 1
+                        }
+                    })
+    except Exception:
+        pass
 
     # Fallback to stream extraction if pypdf yields no valid text or encounters fatal syntax errors
     if not documents:
