@@ -7,8 +7,8 @@ from src.ingest import ingest_file_objects, ingest_directory
 from src.vectorstore import get_vector_store, clear_session_store
 
 app = FastAPI(
-    title="Technical Document Q&A RAG API",
-    description="Privacy-Preserving Session-Isolated RAG API with FAISS Vector Search & LLM Engine",
+    title="DocQuery AI API",
+    description="Privacy-Preserving Session-Isolated Document Intelligence RAG API with FAISS & Gemini Flash AI",
     version="2.0.0"
 )
 
@@ -30,7 +30,7 @@ class QueryRequest(BaseModel):
 @app.get("/")
 def home():
     return {
-        "message": "Technical RAG API running 🚀 (Session-Isolated)",
+        "message": "DocQuery AI API running (Session-Isolated RAG)",
         "vector_store": "FAISS",
         "docs_url": "/docs"
     }

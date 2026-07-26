@@ -1,17 +1,17 @@
-# Document Q&A RAG System
+# DocQuery AI — Document Intelligence & RAG System
 
-## 🚀 Overview
-A Retrieval-Augmented Generation (RAG) system that allows users to query any document type (PDF, DOCX, TXT, MD) using FAISS semantic vector search and Google Gemini LLM generation.
+## Overview
+DocQuery AI is a modern Retrieval-Augmented Generation (RAG) platform that allows users to analyze and query any document type (PDF, DOCX, TXT, MD) using FAISS semantic vector search and Google Gemini Flash AI.
 
-## 🧠 Features
+## Key Features
 - Session-isolated document parsing & chunking
 - FAISS-based vector search with BGE embeddings
-- LLM Integration (Google Gemini Flash / Groq / Fallback)
-- Interactive document upload & progress tracking
+- High-performance LLM Integration (Google Gemini Flash AI)
+- Production-grade UI with interactive drag-and-drop ingestion & progress tracking
 - FastAPI backend & Streamlit frontend
 
-## 🏗️ Architecture
-User Query → Retriever (FAISS) → Relevant Chunks → LLM Engine (Gemini) → Answer
+## Architecture
+User Query → Retriever (FAISS) → Relevant Chunks → Gemini Flash AI → Answer
 
 ## ⚙️ Setup
 
