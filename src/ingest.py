@@ -91,7 +91,7 @@ def ingest_file_objects(files, session_id=None, progress_callback=None):
 
 
 def ingest_directory(dir_path=DATA_DIR, session_id=None, progress_callback=None):
-    """Ingest all technical documents from directory into session-isolated store."""
+    """Ingest all documents from directory into session-isolated store."""
     if not os.path.exists(dir_path):
         os.makedirs(dir_path, exist_ok=True)
         return {"status": "warning", "message": f"Directory {dir_path} was empty. Created folder."}
@@ -110,6 +110,6 @@ def ingest_directory(dir_path=DATA_DIR, session_id=None, progress_callback=None)
 
 
 if __name__ == "__main__":
-    print("[Ingest] Starting Technical Document Ingestion Pipeline...")
+    print("[Ingest] Starting Document Ingestion Pipeline...")
     res = ingest_directory()
     print("[Ingest] Result:", res)

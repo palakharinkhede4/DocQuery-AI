@@ -10,7 +10,7 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 LLM_MODEL = os.getenv("LLM_MODEL", "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 
-# Chunking & Retrieval Parameters (Increased chunk size to 1200 for technical lists & documents)
+# Chunking & Retrieval Parameters (Increased chunk size to 1200 for lists & general documents)
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 1200))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 200))
 TOP_K = int(os.getenv("TOP_K", 4))

@@ -1,7 +1,7 @@
-# Technical Document Q&A RAG System
+# Document Q&A RAG System
 
 ## 🚀 Overview
-A Retrieval-Augmented Generation (RAG) system that allows users to query technical documents using FAISS semantic vector search and Google Gemini LLM generation.
+A Retrieval-Augmented Generation (RAG) system that allows users to query any document type (PDF, DOCX, TXT, MD) using FAISS semantic vector search and Google Gemini LLM generation.
 
 ## 🧠 Features
 - Session-isolated document parsing & chunking

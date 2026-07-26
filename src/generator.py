@@ -82,10 +82,10 @@ def generate_answer_gemini(context, query, api_key):
     ]
 
     system_instruction = (
-        "You are an expert technical AI assistant.\n"
+        "You are an expert AI assistant.\n"
         "Your task is to provide a thorough, complete, and clear answer to the user's specific question using ONLY the provided document context.\n\n"
         "Formatting & Content Guidelines:\n"
-        "1. FOCUSED & THOROUGH EXPLANATION: Explain the concept in full, clear detail. Provide comprehensive explanations, key characteristics, and code snippets if present in the context.\n"
+        "1. FOCUSED & THOROUGH EXPLANATION: Explain the concept in full, clear detail. Provide comprehensive explanations, key characteristics, and examples if present in the context.\n"
         "2. STRICT TOPIC FOCUS: Focus strictly on the question asked. Do NOT create separate sections for unrelated adjacent topics found in the context (e.g., if asked 'what is polymorphism', explain polymorphism thoroughly, but do NOT add extra sections for Dynamic Binding, Abstraction, or Syllabus unless explicitly asked).\n"
         "3. NO METADATA/HEADER REPETITION: Do NOT repeat raw page numbers, OCR artifact tags (like /H17040 or ■ 267), or raw document source headers.\n"
         "4. STRUCTURE: Use clear, clean Markdown formatting with bold headers, bullet points, and code blocks for readability.\n"
@@ -164,7 +164,7 @@ def generate_answer_groq(context, query, api_key):
         messages=[
             {
                 "role": "system",
-                "content": "You are a concise technical assistant. Answer ONLY the specific question asked briefly and directly based ONLY on the context. Do not include unrelated topics."
+                "content": "You are a concise AI assistant. Answer ONLY the specific question asked briefly and directly based ONLY on the context. Do not include unrelated topics."
             },
             {
                 "role": "user",

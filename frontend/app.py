@@ -13,7 +13,7 @@ import requests
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
 st.set_page_config(
-    page_title="Local Technical Doc Q&A System",
+    page_title="Document Q&A System",
     page_icon="🔒",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -80,7 +80,7 @@ with st.sidebar:
     st.markdown("""
     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
         <span style="font-size: 2.2rem;">📚</span>
-        <h2 style="margin: 0; padding: 0; font-size: 1.4rem; font-weight: 700; color: #F1F5F9;">Technical Knowledge Base</h2>
+        <h2 style="margin: 0; padding: 0; font-size: 1.4rem; font-weight: 700; color: #F1F5F9;">Document Knowledge Base</h2>
     </div>
     """, unsafe_allow_html=True)
     st.caption(f"Session ID: `{session_id}`")
@@ -134,8 +134,8 @@ with st.sidebar:
                 st.error(f"Failed to ingest: {e}")
 
     # Demo Documents Button
-    if st.button("⚡ Load Demo Docs (12 Tech Topics)", type="primary", use_container_width=True):
-        progress_bar = st.progress(0, text="Loading 12 technical demo documents...")
+    if st.button("⚡ Load Demo Docs (12 Sample Topics)", type="primary", use_container_width=True):
+        progress_bar = st.progress(0, text="Loading 12 sample demo documents...")
 
         def update_demo_progress(pct, msg):
             val = min(max(float(pct), 0.0), 1.0)
@@ -151,7 +151,7 @@ with st.sidebar:
                 from src.ingest import ingest_directory
                 data = ingest_directory(session_id=session_id, progress_callback=update_demo_progress)
 
-            st.success(f"✅ Ingested {data.get('total_chunks', 0)} chunks from 12 Demo Tech Docs!")
+            st.success(f"✅ Ingested {data.get('total_chunks', 0)} chunks from 12 Demo Docs!")
             st.rerun()
         except Exception as e:
             st.error(f"Failed to load demo docs: {e}")
@@ -198,7 +198,7 @@ with st.sidebar:
 
 
 # Main Header
-st.markdown("<div class='main-header'>🔒 Technical Document Q&A System</div>", unsafe_allow_html=True)
+st.markdown("<div class='main-header'>🔒 Document Q&A System</div>", unsafe_allow_html=True)
 st.markdown("<div class='sub-header'>Session-Isolated RAG powered by FAISS Vector Search & LLM Engine</div>", unsafe_allow_html=True)
 
 # Tabs
@@ -211,7 +211,7 @@ with tab1:
 
     # Pinned Question Box at top
     with st.form(key="qa_form", clear_on_submit=True):
-        user_query = st.text_input("Ask a question about your technical documents:", placeholder="Type your question here...")
+        user_query = st.text_input("Ask a question about your uploaded documents:", placeholder="Type your question here...")
         submit_button = st.form_submit_button("Ask Question 🚀", use_container_width=True)
 
     if submit_button and user_query.strip():

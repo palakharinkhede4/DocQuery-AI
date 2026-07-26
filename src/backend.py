@@ -82,7 +82,7 @@ async def upload_documents(
 
 @app.post("/ingest-demo")
 def ingest_demo_docs(session_id: Optional[str] = Query("default_session")):
-    """Ingest 12 pre-loaded technical demo documents into session-isolated index."""
+    """Ingest 12 pre-loaded sample demo documents into session-isolated index."""
     return ingest_directory(session_id=session_id)
 
 
