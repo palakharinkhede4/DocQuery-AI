@@ -7,17 +7,12 @@ import docx
 
 def clean_pdf_text(text):
     """
-    Clean up PDF font ligature and kerning artifacts.
-    Fixes broken words like 'r ainw ater' -> 'rainwater', 'collec tion' -> 'collection'.
+    Clean up PDF font ligature and kerning glitches.
+    Preserves single-letter words like 'a', 'A', 'I' cleanly.
     """
     if not text:
         return ""
 
-    # Replace common broken font kerning patterns (single letter followed by space inside words)
-    # e.g., 'r ainw ater' -> 'rainwater', 's ystem' -> 'system', 't ypically' -> 'typically'
-    text = re.sub(r'\b([a-zA-Z])\s+([a-zA-Z]{2,})\b', r'\1\2', text)
-    text = re.sub(r'\b([a-zA-Z]{2,})\s+([a-zA-Z])\b', r'\1\2', text)
-    
     # Fix specific recurring PDF OCR / kerning glitches
     glitches = {
         "r ainw ater": "rainwater",
@@ -48,6 +43,9 @@ def clean_pdf_text(text):
 
     for glitch, fix in glitches.items():
         text = re.sub(re.escape(glitch), fix, text, flags=re.IGNORECASE)
+
+    # Clean up footnote superscript markers like 'source.a' -> 'source.'
+    text = re.sub(r'([a-z0-9])\.([a-d1-9])\b', r'\1.', text)
 
     # Clean excessive whitespace
     text = re.sub(r'[ \t]+', ' ', text)

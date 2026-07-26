@@ -65,7 +65,10 @@ def generate_answer_groq(context, query, api_key):
 
 
 def clean_text_glitches(text):
-    """Repair PDF OCR / kerning glitches in context string."""
+    """Repair PDF OCR / kerning glitches and footnote superscripts."""
+    if not text:
+        return ""
+
     glitches = {
         "r ainw ater": "rainwater",
         "rainw ater": "rainwater",
@@ -88,43 +91,78 @@ def clean_text_glitches(text):
     for glitch, fix in glitches.items():
         text = re.sub(re.escape(glitch), fix, text, flags=re.IGNORECASE)
 
-    text = re.sub(r'\b([a-zA-Z])\s+([a-zA-Z]{2,})\b', r'\1\2', text)
-    text = re.sub(r'\b([a-zA-Z]{2,})\s+([a-zA-Z])\b', r'\1\2', text)
+    # Clean up footnote superscript markers like 'source.a' -> 'source.'
+    text = re.sub(r'([a-z0-9])\.([a-d1-9])\b', r'\1.', text)
     return text
+
+
+def prepare_context_units(context):
+    """
+    Normalizes context lines and reconstructs complete multi-line sentences & bullet points.
+    Prevents sentences from breaking mid-phrase.
+    """
+    context_clean = clean_text_glitches(context)
+    lines = [l.strip() for l in context_clean.split("\n") if l.strip() and not l.startswith("[Source:")]
+
+    units = []
+    current_unit = []
+
+    for line in lines:
+        is_new_block = bool(re.match(r'^[•\-\*\d+\.]', line)) or bool(re.match(r'^[A-Z][a-zA-Z\s\(\)]+:', line))
+        if is_new_block:
+            if current_unit:
+                full_text = " ".join(current_unit).strip()
+                if len(full_text) > 20:
+                    units.append(full_text)
+            current_unit = [re.sub(r'^[•\-\*]\s*', '', line).strip()]
+        else:
+            # Check if line continues previous sentence or is a new standalone sentence
+            if current_unit:
+                current_unit.append(line)
+            else:
+                if len(line) > 20:
+                    units.append(line)
+
+    if current_unit:
+        full_text = " ".join(current_unit).strip()
+        if len(full_text) > 20:
+            units.append(full_text)
+
+    # Further break long paragraph units into distinct complete sentences if needed
+    final_sentences = []
+    for u in units:
+        if u.startswith(('•', '-', '*')) or ":" in u[:30]:
+            final_sentences.append(u)
+        else:
+            sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', u)
+            for s in sentences:
+                s_clean = s.strip()
+                if len(s_clean) > 20:
+                    final_sentences.append(s_clean)
+
+    return final_sentences
 
 
 def synthesize_extractive_answer(context, query):
     """
     Production-Grade RAG Context Synthesizer.
-    Calculates query-sentence relevance to extract precise, fluent answers.
+    Parses definitions, components, and bullet items into a clean structured response.
     """
     if not context or not context.strip():
         return "No relevant information found in the document context."
 
-    context_clean = clean_text_glitches(context)
-    lines = [l.strip() for l in context_clean.split("\n") if l.strip() and not l.startswith("[Source:")]
+    units = prepare_context_units(context)
+    if not units:
+        return "No relevant text extracted from context."
 
-    if not lines:
-        return "No relevant text found in document context."
-
-    # Extract distinct sentences and bullet points
-    candidate_units = []
-    for line in lines:
-        if line.startswith(('•', '-', '*')):
-            candidate_units.append(line)
-        else:
-            sentences = re.split(r'(?<=[.!?])\s+', line)
-            for s in sentences:
-                s_clean = s.strip()
-                if len(s_clean) > 20:
-                    candidate_units.append(s_clean)
-
-    query_keywords = set(re.findall(r'\w+', query.lower())) - {
+    # Score candidates against query keywords
+    query_lower = query.lower()
+    query_keywords = set(re.findall(r'\w+', query_lower)) - {
         'what', 'is', 'a', 'an', 'the', 'does', 'do', 'of', 'in', 'and', 'to', 'for', 'are', 'were', 'which'
     }
 
     scored = []
-    for unit in candidate_units:
+    for unit in units:
         score = 0
         u_lower = unit.lower()
 
@@ -133,43 +171,47 @@ def synthesize_extractive_answer(context, query):
             if len(kw) > 2 and kw in u_lower:
                 score += 5
 
-        # Explicit phrase match for overview/consists
-        if "consists of" in query.lower() and "consists of" in u_lower:
-            score += 15
+        # Strong boost for primary definitions when query asks "consists of" / "what is"
+        if "consists of" in query_lower and "consists of" in u_lower:
+            score += 20
 
         if any(w in u_lower for w in ['consists', 'made from', 'include', 'components', 'diverts', 'stores', 'allows', 'used to', 'cleaning', 'flushed']):
             score += 4
 
-        if unit.startswith(('•', '-', '*')):
-            score += 2
+        if unit.startswith(('•', '-', '*')) or ":" in unit[:30]:
+            score += 3
 
         scored.append((score, unit))
 
     scored.sort(key=lambda x: x[0], reverse=True)
-    top_candidates = [unit for score, unit in scored if score > 3]
+    top_units = [unit for score, unit in scored if score > 3]
 
-    if not top_candidates:
-        top_candidates = [unit for score, unit in scored[:3]]
+    if not top_units:
+        top_units = [unit for score, unit in scored[:3]]
 
-    is_component_query = any(k in query.lower() for k in ['component', 'parts', 'elements'])
+    # Detect query type: component list vs definition / general QA
+    is_list_query = any(k in query_lower for k in ['component', 'parts', 'elements', 'list', 'types'])
 
-    if is_component_query and len(top_candidates) > 1:
-        bullets_list = []
+    if is_list_query:
+        formatted_bullets = []
         seen = set()
-        for c in top_candidates[:12]:
-            clean_c = re.sub(r'^[•\-\*\d+\.]\s*', '', c).strip()
-            if clean_c[:40] not in seen:
-                seen.add(clean_c[:40])
-                if ":" in clean_c and not clean_c.startswith("http"):
-                    parts = clean_c.split(":", 1)
-                    bullets_list.append(f"- **{parts[0].strip()}**: {parts[1].strip()}")
+        for u in top_units[:12]:
+            clean_u = re.sub(r'^[•\-\*\d+\.]\s*', '', u).strip()
+            if clean_u[:40] not in seen:
+                seen.add(clean_u[:40])
+                if ":" in clean_u and not clean_u.startswith("http"):
+                    parts = clean_u.split(":", 1)
+                    formatted_bullets.append(f"- **{parts[0].strip()}**: {parts[1].strip()}")
                 else:
-                    bullets_list.append(f"- {clean_c}")
-        return "**Key Components & System Details:**\n\n" + "\n".join(bullets_list)
+                    formatted_bullets.append(f"- {clean_u}")
 
+        return "**Key Components & System Details:**\n\n" + "\n".join(formatted_bullets)
+
+    # General / Definition QA: return top unbroken sentences
     unique_answers = []
     seen_txt = set()
-    for item in top_candidates[:3]:
+
+    for item in top_units[:3]:
         clean_item = re.sub(r'^[•\-\*\d+\.]\s*', '', item).strip()
         if clean_item[:30] not in seen_txt:
             seen_txt.add(clean_item[:30])
