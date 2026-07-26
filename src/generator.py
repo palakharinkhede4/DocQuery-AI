@@ -71,7 +71,7 @@ def get_api_key(key_name):
 
 def generate_answer_gemini(context, query, api_key):
     """
-    Generate a high-quality, beautifully structured Markdown response using Google Gemini API.
+    Generate a concise, highly focused, beautifully structured Markdown response using Google Gemini API.
     """
     models_to_try = [
         "gemini-2.5-flash",
@@ -82,12 +82,13 @@ def generate_answer_gemini(context, query, api_key):
     ]
 
     system_instruction = (
-        "You are an expert technical assistant. Synthesize a clean, direct, beautifully structured "
-        "markdown answer to the user's question using ONLY the provided document context.\n"
-        "Rules:\n"
-        "- Explain technical concepts clearly using bold headers, code snippets, and bullet points where helpful.\n"
-        "- Do NOT repeat raw metadata tags, page markers (like /H17040 or ■ 267), or raw context headers inside your answer body.\n"
-        "- If the provided context does not contain enough information to answer the question, state: "
+        "You are a precise, highly focused technical AI assistant.\n"
+        "Your task is to provide a CONCISE, direct, and focused answer to the user's question using ONLY the provided document context.\n\n"
+        "Strict Formatting & Content Guidelines:\n"
+        "1. STRICT CONCISENESS & FOCUS: Answer ONLY the specific question asked. Keep answers brief (1-2 short paragraphs or clean bullet points). Do NOT include adjacent topics, tangential concepts, or unrelated sections (e.g., if asked 'what is polymorphism', explain ONLY polymorphism; do NOT include separate sections for Dynamic Binding, Abstraction, Encapsulation, or Syllabus unless explicitly asked).\n"
+        "2. NO METADATA/HEADER REPETITION: Do NOT repeat raw page numbers, OCR artifact tags (like /H17040 or ■ 267), or raw document source headers.\n"
+        "3. STRUCTURE: Use clear, clean formatting with bold terms and short bullet points.\n"
+        "4. MISSING INFO: If the provided context does NOT contain enough information to answer the question, state ONLY: "
         "'Based on the provided documents, I could not find sufficient information to answer your question.'"
     )
 
@@ -104,7 +105,7 @@ def generate_answer_gemini(context, query, api_key):
         ],
         "generationConfig": {
             "temperature": 0.2,
-            "maxOutputTokens": MAX_TOKENS
+            "maxOutputTokens": 400
         }
     }
 
@@ -134,7 +135,7 @@ def generate_answer_gemini(context, query, api_key):
                     ],
                     "generationConfig": {
                         "temperature": 0.2,
-                        "maxOutputTokens": MAX_TOKENS
+                        "maxOutputTokens": 400
                     }
                 }
                 res_fb = requests.post(url, headers=headers, json=fallback_payload, timeout=15)
@@ -162,14 +163,14 @@ def generate_answer_groq(context, query, api_key):
         messages=[
             {
                 "role": "system",
-                "content": "You are an expert technical assistant. Synthesize a clean, direct, beautifully structured markdown answer based ONLY on the provided context."
+                "content": "You are a concise technical assistant. Answer ONLY the specific question asked briefly and directly based ONLY on the context. Do not include unrelated topics."
             },
             {
                 "role": "user",
                 "content": f"Context:\n{context}\n\nQuestion: {query}"
             }
         ],
-        max_tokens=MAX_TOKENS,
+        max_tokens=400,
         temperature=0.2
     )
     return response.choices[0].message.content.strip()
@@ -183,6 +184,7 @@ def clean_text_glitches(text):
     # Clean PDF structural header tags and page number glitches like '/H17040' or '■ 487'
     text = re.sub(r'/H\d+', '', text)
     text = re.sub(r'■\s*\d+', '', text)
+    text = re.sub(r'P\.T\.O\s*\d*', '', text)
 
     glitches = {
         "r ainw ater": "rainwater",
@@ -223,7 +225,7 @@ def prepare_context_units(context):
     current_unit = []
 
     for line in lines:
-        is_new_block = bool(re.match(r'^[•\-\*\d+\.]', line)) or bool(re.match(r'^[A-Z][a-zA-Z\s\(\)]+:', line))
+        is_new_block = bool(re.match(r'^[•\-\*\d+\.]', line)) or bool(re.match(r'^[A-Z\s]{3,25}:', line))
         if is_new_block:
             if current_unit:
                 full_text = " ".join(current_unit).strip()
@@ -231,7 +233,6 @@ def prepare_context_units(context):
                     units.append(full_text)
             current_unit = [re.sub(r'^[•\-\*]\s*', '', line).strip()]
         else:
-            # Check if line continues previous sentence or is a new standalone sentence
             if current_unit:
                 current_unit.append(line)
             else:
@@ -243,7 +244,6 @@ def prepare_context_units(context):
         if len(full_text) > 20:
             units.append(full_text)
 
-    # Further break long paragraph units into distinct complete sentences if needed
     final_sentences = []
     for u in units:
         if u.startswith(('•', '-', '*')) or ":" in u[:30]:
@@ -260,8 +260,8 @@ def prepare_context_units(context):
 
 def synthesize_extractive_answer(context, query):
     """
-    Production-Grade RAG Context Synthesizer.
-    Parses definitions, components, and bullet items into a clean structured response.
+    Production-Grade RAG Context Synthesizer with topic isolation.
+    Parses definitions and bullet items into a concise structured response.
     """
     if not context or not context.strip():
         return "No relevant information found in the document context."
@@ -270,10 +270,9 @@ def synthesize_extractive_answer(context, query):
     if not units:
         return "No relevant text extracted from context."
 
-    # Score candidates against query keywords
     query_lower = query.lower()
     query_keywords = set(re.findall(r'\w+', query_lower)) - {
-        'what', 'is', 'a', 'an', 'the', 'does', 'do', 'of', 'in', 'and', 'to', 'for', 'are', 'were', 'which'
+        'what', 'is', 'a', 'an', 'the', 'does', 'do', 'of', 'in', 'and', 'to', 'for', 'are', 'were', 'which', 'explain', 'describe'
     }
 
     scored = []
@@ -281,20 +280,23 @@ def synthesize_extractive_answer(context, query):
         score = 0
         u_lower = unit.lower()
 
+        # Penalize unrelated uppercase topic headers (e.g., "DYNAMIC BINDING:" when asking about polymorphism)
+        header_match = re.match(r'^([A-Z\s]{3,25}):', unit.strip())
+        if header_match:
+            header_text = header_match.group(1).lower()
+            if not any(kw in header_text for kw in query_keywords if len(kw) > 2):
+                score -= 30
+
         # Word overlap score
         for kw in query_keywords:
             if len(kw) > 2 and kw in u_lower:
-                score += 5
+                score += 8
 
-        # Strong boost for primary definitions when query asks "consists of" / "what is"
-        if "consists of" in query_lower and "consists of" in u_lower:
-            score += 20
-
-        if any(w in u_lower for w in ['consists', 'made from', 'include', 'components', 'diverts', 'stores', 'allows', 'used to', 'cleaning', 'flushed']):
-            score += 4
+        if any(w in u_lower for w in ['means', 'defined as', 'refers to', 'ability to', 'process by which']):
+            score += 5
 
         if unit.startswith(('•', '-', '*')) or ":" in unit[:30]:
-            score += 3
+            score += 2
 
         scored.append((score, unit))
 
@@ -302,31 +304,13 @@ def synthesize_extractive_answer(context, query):
     top_units = [unit for score, unit in scored if score > 3]
 
     if not top_units:
-        top_units = [unit for score, unit in scored[:3]]
+        top_units = [unit for score, unit in scored[:2]]
 
-    # Detect query type: component list vs definition / general QA
-    is_list_query = any(k in query_lower for k in ['component', 'parts', 'elements', 'list', 'types'])
-
-    if is_list_query:
-        formatted_bullets = []
-        seen = set()
-        for u in top_units[:12]:
-            clean_u = re.sub(r'^[•\-\*\d+\.]\s*', '', u).strip()
-            if clean_u[:40] not in seen:
-                seen.add(clean_u[:40])
-                if ":" in clean_u and not clean_u.startswith("http"):
-                    parts = clean_u.split(":", 1)
-                    formatted_bullets.append(f"- **{parts[0].strip()}**: {parts[1].strip()}")
-                else:
-                    formatted_bullets.append(f"- {clean_u}")
-
-        return "**Key Components & System Details:**\n\n" + "\n".join(formatted_bullets)
-
-    # General / Definition QA: return top unbroken sentences
+    # Return top 2 relevant unbroken sentences for conciseness
     unique_answers = []
     seen_txt = set()
 
-    for item in top_units[:3]:
+    for item in top_units[:2]:
         clean_item = re.sub(r'^[•\-\*\d+\.]\s*', '', item).strip()
         if clean_item[:30] not in seen_txt:
             seen_txt.add(clean_item[:30])
