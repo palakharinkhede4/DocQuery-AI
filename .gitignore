@@ -1,6 +1,20 @@
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+next-env.d.ts
+
+# Python & Virtualenv
 venv/
 __pycache__/
 *.pyc
 vectorstore/faiss_index/
 .env
 .cache/
+.streamlit/
+node_modules
