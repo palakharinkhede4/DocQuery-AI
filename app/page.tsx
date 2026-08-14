@@ -21,8 +21,9 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [activeQuery, setActiveQuery] = useState<string | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
 
-  // Initialize Session ID on mount
+  // Initialize Session ID & Theme on mount
   useEffect(() => {
     let sid = localStorage.getItem("docquery_session_id");
     if (!sid) {
@@ -30,7 +31,39 @@ export default function Home() {
       localStorage.setItem("docquery_session_id", sid);
     }
     setSessionId(sid);
+
+    // Theme initialization: check localStorage or system preference
+    const savedTheme = localStorage.getItem("docquery_theme") as "light" | "dark" | null;
+    if (savedTheme) {
+      setTheme(savedTheme);
+      if (savedTheme === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    } else {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const initialTheme = prefersDark ? "dark" : "light";
+      setTheme(initialTheme);
+      if (initialTheme === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    }
   }, []);
+
+  const handleToggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    localStorage.setItem("docquery_theme", nextTheme);
+
+    if (nextTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  };
 
   const refreshStats = useCallback(async (sid = sessionId) => {
     if (!sid) return;
@@ -120,7 +153,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#080d1a]">
+    <div className="min-h-screen flex flex-col bg-stone-100/50 dark:bg-[#0c0a09] transition-colors">
       {/* Top Navigation Bar */}
       <Header
         sessionId={sessionId}
@@ -128,6 +161,8 @@ export default function Home() {
         totalDocs={files.length}
         onResetSession={handleResetSession}
         isResetting={isResetting}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
       />
 
       {/* Main Split Layout */}
@@ -146,7 +181,7 @@ export default function Home() {
           />
 
           {/* Right Query & Results Thread */}
-          <section className="flex-1 w-full space-y-6">
+          <section className="flex-1 w-full space-y-4">
             {/* Query Console */}
             <QueryConsole
               onAsk={handleAsk}

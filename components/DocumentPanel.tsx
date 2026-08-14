@@ -67,7 +67,7 @@ export function DocumentPanel({
         throw new Error(data.message || "Failed to process documents.");
       }
 
-      setStatusMessage(`Successfully indexed ${data.totalChunks} chunks from ${data.documentsCount} file(s).`);
+      setStatusMessage(`Indexed ${data.totalChunks} chunks from ${data.documentsCount} file(s).`);
       onUploadSuccess();
       setTimeout(() => setStatusMessage(null), 4000);
     } catch (err: unknown) {
@@ -84,7 +84,7 @@ export function DocumentPanel({
   const handleLoadDemo = async () => {
     setIsLoadingDemo(true);
     setIsError(false);
-    setStatusMessage("Ingesting 14 technical demo documents...");
+    setStatusMessage("Ingesting sample documents...");
 
     try {
       const res = await fetch(`/api/demo-docs?session_id=${sessionId}`, {
@@ -110,13 +110,13 @@ export function DocumentPanel({
   return (
     <aside className="w-full lg:w-80 xl:w-96 shrink-0 space-y-4">
       {/* Upload Zone Card */}
-      <div className="rounded-xl border border-slate-800/80 bg-slate-900/60 p-4 shadow-sm backdrop-blur-sm">
+      <div className="rounded-xl border border-stone-200 dark:border-stone-800/90 bg-white dark:bg-stone-900/60 p-4 shadow-sm backdrop-blur-sm transition-colors">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <Database className="h-4 w-4 text-blue-400" />
-            <h2 className="text-sm font-semibold text-slate-100">Knowledge Base</h2>
+            <Database className="h-4 w-4 text-stone-700 dark:text-stone-300" />
+            <h2 className="text-sm font-semibold text-stone-900 dark:text-stone-100">Knowledge Base</h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400">
+          <span className="text-[11px] font-mono text-stone-500 dark:text-stone-400">
             {totalChunks} Chunks
           </span>
         </div>
@@ -136,8 +136,8 @@ export function DocumentPanel({
           onClick={() => fileInputRef.current?.click()}
           className={`cursor-pointer rounded-lg border-2 border-dashed p-5 text-center transition-all ${
             isDragging
-              ? "border-blue-500 bg-blue-500/10"
-              : "border-slate-800 hover:border-slate-700 bg-slate-950/40"
+              ? "border-stone-900 dark:border-stone-300 bg-stone-100 dark:bg-stone-800/40"
+              : "border-stone-200 dark:border-stone-800 hover:border-stone-400 dark:hover:border-stone-700 bg-stone-50/50 dark:bg-stone-950/40"
           }`}
         >
           <input
@@ -150,7 +150,7 @@ export function DocumentPanel({
           />
 
           <div className="flex flex-col items-center justify-center space-y-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800/80 text-blue-400">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300">
               {isUploading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
@@ -158,10 +158,10 @@ export function DocumentPanel({
               )}
             </div>
             <div>
-              <p className="text-xs font-medium text-slate-200">
+              <p className="text-xs font-medium text-stone-800 dark:text-stone-200">
                 {isUploading ? "Extracting & Indexing..." : "Click to upload or drag files"}
               </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
+              <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
                 PDF, DOCX, TXT, MD, CSV (Max 25MB)
               </p>
             </div>
@@ -173,8 +173,8 @@ export function DocumentPanel({
           <div
             className={`mt-3 rounded-lg border p-2.5 text-xs flex items-start gap-2 ${
               isError
-                ? "border-red-900/50 bg-red-950/30 text-red-300"
-                : "border-emerald-900/50 bg-emerald-950/30 text-emerald-300"
+                ? "border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300"
+                : "border-emerald-200 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300"
             }`}
           >
             {isError ? (
@@ -187,17 +187,17 @@ export function DocumentPanel({
         )}
 
         {/* Demo Dataset Quick Action */}
-        <div className="mt-3 pt-3 border-t border-slate-800/80">
+        <div className="mt-3 pt-3 border-t border-stone-200 dark:border-stone-800/80">
           <button
             type="button"
             onClick={handleLoadDemo}
             disabled={isLoadingDemo || isUploading}
-            className="w-full flex items-center justify-center gap-2 rounded-lg border border-slate-700/80 bg-slate-800/50 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800 hover:text-white transition-colors disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 rounded-lg border border-stone-300 dark:border-stone-700 bg-stone-100 dark:bg-stone-800/60 px-3 py-2 text-xs font-medium text-stone-800 dark:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors disabled:opacity-50"
           >
             {isLoadingDemo ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-stone-600 dark:text-stone-400" />
             ) : (
-              <Zap className="h-3.5 w-3.5 text-blue-400" />
+              <Zap className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
             )}
             <span>Load 14 Sample Technical Documents</span>
           </button>
@@ -205,18 +205,18 @@ export function DocumentPanel({
       </div>
 
       {/* Active Indexed Documents List */}
-      <div className="rounded-xl border border-slate-800/80 bg-slate-900/60 p-4 shadow-sm backdrop-blur-sm">
+      <div className="rounded-xl border border-stone-200 dark:border-stone-800/90 bg-white dark:bg-stone-900/60 p-4 shadow-sm backdrop-blur-sm transition-colors">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <FileCheck className="h-4 w-4 text-emerald-400" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+            <FileCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-600 dark:text-stone-400">
               Active Documents ({files.length})
             </h3>
           </div>
         </div>
 
         {files.length === 0 ? (
-          <p className="text-xs text-slate-500 py-3 text-center">
+          <p className="text-xs text-stone-500 dark:text-stone-400 py-3 text-center">
             No documents in this session yet. Upload a file or load sample documents above.
           </p>
         ) : (
@@ -224,13 +224,13 @@ export function DocumentPanel({
             {files.map((fname, idx) => (
               <div
                 key={idx}
-                className="flex items-center justify-between rounded-lg border border-slate-800/70 bg-slate-950/50 px-2.5 py-2 text-xs text-slate-300 hover:border-slate-700 transition-colors"
+                className="flex items-center justify-between rounded-lg border border-stone-200 dark:border-stone-800/80 bg-stone-50 dark:bg-stone-950/50 px-2.5 py-2 text-xs text-stone-700 dark:text-stone-300 hover:border-stone-300 dark:hover:border-stone-700 transition-colors"
               >
                 <div className="flex items-center gap-2 truncate pr-2">
-                  <FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  <FileText className="h-3.5 w-3.5 text-stone-400 shrink-0" />
                   <span className="truncate font-mono text-[11px]">{fname}</span>
                 </div>
-                <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400 font-mono">
+                <span className="shrink-0 rounded bg-stone-200 dark:bg-stone-800 px-1.5 py-0.5 text-[10px] text-stone-600 dark:text-stone-400 font-mono">
                   Indexed
                 </span>
               </div>
@@ -240,29 +240,29 @@ export function DocumentPanel({
       </div>
 
       {/* Retrieval Engine Settings (Collapsible) */}
-      <div className="rounded-xl border border-slate-800/80 bg-slate-900/60 p-4 shadow-sm backdrop-blur-sm">
+      <div className="rounded-xl border border-stone-200 dark:border-stone-800/90 bg-white dark:bg-stone-900/60 p-4 shadow-sm backdrop-blur-sm transition-colors">
         <button
           type="button"
           onClick={() => setShowSettings(!showSettings)}
-          className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-300 hover:text-slate-100"
+          className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100"
         >
           <div className="flex items-center gap-2">
-            <Sliders className="h-4 w-4 text-blue-400" />
+            <Sliders className="h-4 w-4 text-stone-700 dark:text-stone-300" />
             <span>Retrieval Parameters</span>
           </div>
           {showSettings ? (
-            <ChevronUp className="h-4 w-4 text-slate-400" />
+            <ChevronUp className="h-4 w-4 text-stone-400" />
           ) : (
-            <ChevronDown className="h-4 w-4 text-slate-400" />
+            <ChevronDown className="h-4 w-4 text-stone-400" />
           )}
         </button>
 
         {showSettings && (
-          <div className="mt-3.5 space-y-4 text-xs text-slate-300 pt-3 border-t border-slate-800/80">
+          <div className="mt-3.5 space-y-4 text-xs text-stone-700 dark:text-stone-300 pt-3 border-t border-stone-200 dark:border-stone-800/80">
             <div>
               <div className="flex justify-between mb-1">
-                <span className="text-slate-400">Top-K Passages:</span>
-                <span className="font-mono text-slate-200">{topK}</span>
+                <span className="text-stone-500 dark:text-stone-400">Top-K Passages:</span>
+                <span className="font-mono text-stone-800 dark:text-stone-200">{topK}</span>
               </div>
               <input
                 type="range"
@@ -271,9 +271,9 @@ export function DocumentPanel({
                 step="1"
                 value={topK}
                 onChange={(e) => setTopK(Number(e.target.value))}
-                className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                className="w-full h-1.5 bg-stone-200 dark:bg-stone-800 rounded-lg appearance-none cursor-pointer accent-stone-900 dark:accent-stone-100"
               />
-              <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+              <div className="flex justify-between text-[10px] text-stone-400 mt-1">
                 <span>Fast (1)</span>
                 <span>Balanced (4)</span>
                 <span>Deep (8)</span>
@@ -282,8 +282,8 @@ export function DocumentPanel({
 
             <div>
               <div className="flex justify-between mb-1">
-                <span className="text-slate-400">Relevance Threshold:</span>
-                <span className="font-mono text-slate-200">{(minScore * 100).toFixed(0)}%</span>
+                <span className="text-stone-500 dark:text-stone-400">Relevance Threshold:</span>
+                <span className="font-mono text-stone-800 dark:text-stone-200">{(minScore * 100).toFixed(0)}%</span>
               </div>
               <input
                 type="range"
@@ -292,9 +292,9 @@ export function DocumentPanel({
                 step="0.05"
                 value={minScore}
                 onChange={(e) => setMinScore(Number(e.target.value))}
-                className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                className="w-full h-1.5 bg-stone-200 dark:bg-stone-800 rounded-lg appearance-none cursor-pointer accent-stone-900 dark:accent-stone-100"
               />
-              <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+              <div className="flex justify-between text-[10px] text-stone-400 mt-1">
                 <span>Permissive (10%)</span>
                 <span>Strict (80%)</span>
               </div>
