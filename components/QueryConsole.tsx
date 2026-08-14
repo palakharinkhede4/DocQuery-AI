@@ -1,27 +1,16 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Send, CornerDownLeft, Loader2, BookOpen } from "lucide-react";
+import { Send, CornerDownLeft, Loader2 } from "lucide-react";
 
 interface QueryConsoleProps {
   onAsk: (query: string) => void;
   isLoading: boolean;
-  hasDocuments: boolean;
 }
-
-const SAMPLE_QUERIES = [
-  "How does the Transformer self-attention mechanism calculate query-key weights?",
-  "What is the difference between supervised and unsupervised learning?",
-  "Explain the core components of a rainwater harvesting and collection system.",
-  "How does gradient descent optimization update model parameters?",
-  "What regularization techniques prevent overfitting in deep neural networks?",
-  "What is the role of Docker containerization and Dockerfiles in deployment?",
-];
 
 export function QueryConsole({
   onAsk,
   isLoading,
-  hasDocuments,
 }: QueryConsoleProps) {
   const [query, setQuery] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -40,13 +29,6 @@ export function QueryConsole({
     }
   };
 
-  const handleSelectSample = (sample: string) => {
-    setQuery(sample);
-    if (textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  };
-
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -56,30 +38,6 @@ export function QueryConsole({
 
   return (
     <div className="space-y-3">
-      {/* Sample Query Suggestions */}
-      {!hasDocuments && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <BookOpen className="h-4 w-4 text-blue-400" />
-            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-              Suggested Technical Queries
-            </span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {SAMPLE_QUERIES.map((sq, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleSelectSample(sq)}
-                className="text-left rounded-lg border border-slate-800/80 bg-slate-950/60 p-2.5 text-xs text-slate-300 hover:border-slate-700 hover:bg-slate-900 hover:text-slate-100 transition-colors"
-              >
-                {sq}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Main Query Input Box */}
       <form
         onSubmit={handleSubmit}

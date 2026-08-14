@@ -5,7 +5,6 @@ import { Header } from "@/components/Header";
 import { DocumentPanel } from "@/components/DocumentPanel";
 import { QueryConsole } from "@/components/QueryConsole";
 import { MessageThread } from "@/components/MessageThread";
-import { ApiKeyModal } from "@/components/ApiKeyModal";
 import { QueryResponse, SessionStats } from "@/lib/types";
 
 function generateSessionId(): string {
@@ -14,8 +13,6 @@ function generateSessionId(): string {
 
 export default function Home() {
   const [sessionId, setSessionId] = useState<string>("");
-  const [apiKey, setApiKey] = useState<string>("");
-  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [files, setFiles] = useState<string[]>([]);
   const [totalChunks, setTotalChunks] = useState(0);
   const [topK, setTopK] = useState(4);
@@ -25,7 +22,7 @@ export default function Home() {
   const [isResetting, setIsResetting] = useState(false);
   const [activeQuery, setActiveQuery] = useState<string | null>(null);
 
-  // Initialize Session & local storage API key on mount
+  // Initialize Session ID on mount
   useEffect(() => {
     let sid = localStorage.getItem("docquery_session_id");
     if (!sid) {
@@ -33,9 +30,6 @@ export default function Home() {
       localStorage.setItem("docquery_session_id", sid);
     }
     setSessionId(sid);
-
-    const savedKey = localStorage.getItem("docquery_custom_gemini_key") || "";
-    setApiKey(savedKey);
   }, []);
 
   const refreshStats = useCallback(async (sid = sessionId) => {
@@ -57,11 +51,6 @@ export default function Home() {
       refreshStats(sessionId);
     }
   }, [sessionId, refreshStats]);
-
-  const handleSaveApiKey = (key: string) => {
-    setApiKey(key);
-    localStorage.setItem("docquery_custom_gemini_key", key);
-  };
 
   const handleResetSession = async () => {
     if (isResetting || !sessionId) return;
@@ -92,16 +81,11 @@ export default function Home() {
     setActiveQuery(queryText);
 
     try {
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      if (apiKey) {
-        headers["x-gemini-api-key"] = apiKey;
-      }
-
       const res = await fetch("/api/ask", {
         method: "POST",
-        headers,
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           query: queryText,
           top_k: topK,
@@ -143,8 +127,6 @@ export default function Home() {
         totalChunks={totalChunks}
         totalDocs={files.length}
         onResetSession={handleResetSession}
-        onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
-        hasCustomKey={Boolean(apiKey)}
         isResetting={isResetting}
       />
 
@@ -161,7 +143,6 @@ export default function Home() {
             minScore={minScore}
             setMinScore={setMinScore}
             onUploadSuccess={() => refreshStats(sessionId)}
-            apiKey={apiKey}
           />
 
           {/* Right Query & Results Thread */}
@@ -170,7 +151,6 @@ export default function Home() {
             <QueryConsole
               onAsk={handleAsk}
               isLoading={isLoading}
-              hasDocuments={files.length > 0}
             />
 
             {/* Conversation History / Results */}
@@ -182,14 +162,6 @@ export default function Home() {
           </section>
         </div>
       </main>
-
-      {/* API Key Modal */}
-      <ApiKeyModal
-        isOpen={isApiKeyModalOpen}
-        onClose={() => setIsApiKeyModalOpen(false)}
-        onSaveKey={handleSaveApiKey}
-        currentKey={apiKey}
-      />
     </div>
   );
 }

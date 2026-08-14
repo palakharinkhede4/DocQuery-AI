@@ -2,13 +2,11 @@
 
 import React, { useState } from "react";
 import {
-  Activity,
   RotateCcw,
-  Key,
   Copy,
   Check,
   Cpu,
-  Layers
+  Layers,
 } from "lucide-react";
 
 interface HeaderProps {
@@ -16,8 +14,6 @@ interface HeaderProps {
   totalChunks: number;
   totalDocs: number;
   onResetSession: () => void;
-  onOpenApiKeyModal: () => void;
-  hasCustomKey: boolean;
   isResetting: boolean;
 }
 
@@ -26,8 +22,6 @@ export function Header({
   totalChunks,
   totalDocs,
   onResetSession,
-  onOpenApiKeyModal,
-  hasCustomKey,
   isResetting,
 }: HeaderProps) {
   const [copied, setCopied] = useState(false);
@@ -92,21 +86,6 @@ export function Header({
             ) : (
               <Copy className="h-3.5 w-3.5" />
             )}
-          </button>
-
-          {/* API Key Modal Trigger */}
-          <button
-            onClick={onOpenApiKeyModal}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-              hasCustomKey
-                ? "border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
-                : "border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-            }`}
-          >
-            <Key className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">
-              {hasCustomKey ? "Custom Key Set" : "API Config"}
-            </span>
           </button>
 
           {/* Reset Session Button */}

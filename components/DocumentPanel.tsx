@@ -24,7 +24,6 @@ interface DocumentPanelProps {
   minScore: number;
   setMinScore: (val: number) => void;
   onUploadSuccess: () => void;
-  apiKey?: string;
 }
 
 export function DocumentPanel({
@@ -36,7 +35,6 @@ export function DocumentPanel({
   minScore,
   setMinScore,
   onUploadSuccess,
-  apiKey,
 }: DocumentPanelProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -59,14 +57,8 @@ export function DocumentPanel({
     }
 
     try {
-      const headers: Record<string, string> = {};
-      if (apiKey) {
-        headers["x-gemini-api-key"] = apiKey;
-      }
-
       const res = await fetch(`/api/documents?session_id=${sessionId}`, {
         method: "POST",
-        headers,
         body: formData,
       });
 
@@ -95,14 +87,8 @@ export function DocumentPanel({
     setStatusMessage("Ingesting 14 technical demo documents...");
 
     try {
-      const headers: Record<string, string> = {};
-      if (apiKey) {
-        headers["x-gemini-api-key"] = apiKey;
-      }
-
       const res = await fetch(`/api/demo-docs?session_id=${sessionId}`, {
         method: "POST",
-        headers,
       });
 
       const data = await res.json();
