@@ -23,6 +23,26 @@ STOPWORDS = {
 }
 
 
+def stem_term(word: str) -> str:
+    """Lightweight morphological stemmer for technical terminology."""
+    w = word.lower().strip()
+    if len(w) <= 3:
+        return w
+    if w.endswith("sses"):
+        return w[:-2]
+    if w.endswith("ies") and len(w) > 4:
+        return w[:-3] + "y"
+    if w.endswith("ss"):
+        return w
+    if w.endswith("s") and len(w) > 3:
+        return w[:-1]
+    if w.endswith("ing") and len(w) > 5:
+        return w[:-3]
+    if w.endswith("ed") and len(w) > 4:
+        return w[:-2]
+    return w
+
+
 def tokenize(text: str) -> List[str]:
     """Tokenize and normalize text into clean lowercase terms."""
     if not text:
@@ -31,10 +51,35 @@ def tokenize(text: str) -> List[str]:
     return [w for w in cleaned.split() if len(w) > 1]
 
 
+def is_index_or_syllabus_chunk(text: str) -> bool:
+    """Detect if a chunk is a Syllabus, Table of Contents, or Navigation Index."""
+    if not text:
+        return False
+    t_lower = text.lower()
+    
+    # Check for strong index markers
+    if "syllabus" in t_lower[:100] or "contents" in t_lower[:100]:
+        return True
+    
+    # Check for repeated "Lecture 01:", "Lecture 02:" TOC patterns
+    lecture_count = len(re.findall(r'lecture\s*\d+\s*:', t_lower))
+    if lecture_count >= 3:
+        return True
+        
+    module_count = len(re.findall(r'module\s*[-–—:]?\s*(?:i|ii|iii|iv|v|\d+)', t_lower))
+    if module_count >= 2 and len(t_lower) < 600:
+        return True
+        
+    # Check for book reference list
+    if "text books:" in t_lower or "reference books:" in t_lower:
+        return True
+        
+    return False
+
+
 class BM25Index:
     """
-    High-Performance In-Memory BM25 Okapi Index for Sparse Keyword Retrieval.
-    Implements Lucene-style IDF and length-normalized term frequency scoring.
+    High-Performance In-Memory BM25 Okapi Index with N-Gram & Phrase Boosting.
     """
     def __init__(self, k1: float = 1.5, b: float = 0.75):
         self.k1 = k1
@@ -47,7 +92,6 @@ class BM25Index:
         self.documents: List[Dict[str, Any]] = []
 
     def build_index(self, documents: List[Dict[str, Any]]):
-        """Index a list of chunk records with text and metadata."""
         self.documents = documents
         self.total_docs = len(documents)
         self.doc_len = []
@@ -61,7 +105,7 @@ class BM25Index:
         total_tokens = 0
         for doc in documents:
             text = doc.get("text", "") if isinstance(doc, dict) else str(doc)
-            tokens = tokenize(text)
+            tokens = [stem_term(t) for t in tokenize(text)]
             self.doc_len.append(len(tokens))
             total_tokens += len(tokens)
 
@@ -75,23 +119,22 @@ class BM25Index:
 
         self.avg_doc_len = total_tokens / max(self.total_docs, 1)
 
-    def search(self, query: str, top_k: int = 10) -> List[Tuple[int, float]]:
-        """Search BM25 index and return (doc_index, score) pairs."""
+    def search(self, query: str, top_k: int = 40) -> List[Tuple[int, float]]:
         if self.total_docs == 0 or not query.strip():
             return []
 
-        tokens = tokenize(query)
-        keywords = [t for t in tokens if t not in STOPWORDS]
-        effective_keywords = keywords if keywords else tokens
+        raw_tokens = tokenize(query)
+        keywords = [t for t in raw_tokens if t not in STOPWORDS]
+        effective_keywords = keywords if keywords else raw_tokens
+        stemmed_keywords = [stem_term(k) for k in effective_keywords]
 
         scores = [0.0] * self.total_docs
 
-        for word in effective_keywords:
+        for word in stemmed_keywords:
             df = self.doc_freqs.get(word, 0)
             if df == 0:
                 continue
 
-            # Standard BM25 Okapi IDF
             idf = math.log(1.0 + (self.total_docs - df + 0.5) / (df + 0.5))
 
             for idx in range(self.total_docs):
@@ -101,15 +144,42 @@ class BM25Index:
                     denom = tf + self.k1 * (1.0 - self.b + self.b * (d_len / max(self.avg_doc_len, 1.0)))
                     scores[idx] += idf * ((tf * (self.k1 + 1.0)) / denom)
 
-        # Exact phrase bonus
-        query_clean = " ".join(effective_keywords)
-        if len(query_clean) > 4:
-            for idx, doc in enumerate(self.documents):
-                doc_text = doc.get("text", "") if isinstance(doc, dict) else str(doc)
-                if query_clean in doc_text.lower():
-                    scores[idx] += 3.0
+        # Advanced N-gram & Heading Boost
+        query_lower = query.lower()
+        exact_phrase = " ".join(effective_keywords)
+        bigrams = []
+        if len(effective_keywords) >= 2:
+            for i in range(len(effective_keywords) - 1):
+                bigrams.append(f"{effective_keywords[i]} {effective_keywords[i+1]}")
+                # Also singular bigram
+                bigrams.append(f"{stem_term(effective_keywords[i])} {stem_term(effective_keywords[i+1])}")
 
-        # Sort by score descending
+        for idx, doc in enumerate(self.documents):
+            doc_text = doc.get("text", "") if isinstance(doc, dict) else str(doc)
+            doc_lower = doc_text.lower()
+
+            # Exact full phrase match boost (+12.0)
+            if len(exact_phrase) > 4 and exact_phrase in doc_lower:
+                scores[idx] += 12.0
+
+            # Heading match boost (+15.0): if phrase appears at line start / heading
+            first_lines = "\n".join(doc_lower.split("\n")[:3])
+            if exact_phrase in first_lines:
+                scores[idx] += 15.0
+
+            # Bigram matches (+4.0 each)
+            for bg in bigrams:
+                if len(bg) > 4 and bg in doc_lower:
+                    scores[idx] += 4.0
+
+            # Explanatory content boost (+3.0)
+            if any(exp in doc_lower for exp in ["is a", "can only be", "defined as", "refers to", "syntax:", "class "]):
+                scores[idx] += 3.0
+
+            # TOC / Syllabus penalty (-12.0)
+            if is_index_or_syllabus_chunk(doc_text):
+                scores[idx] = max(0.1, scores[idx] * 0.25 - 8.0)
+
         ranked = [(idx, score) for idx, score in enumerate(scores) if score > 0]
         ranked.sort(key=lambda x: x[1], reverse=True)
         return ranked[:top_k]
@@ -122,20 +192,14 @@ def reciprocal_rank_fusion(
     k: int = RRF_K,
     top_k: int = 10
 ) -> List[Dict[str, Any]]:
-    """
-    Reciprocal Rank Fusion (RRF):
-    Combines dense and sparse ranking sets by score = sum(1 / (k + rank)).
-    """
     rrf_scores: Dict[int, float] = {}
     dense_rank_map: Dict[int, int] = {}
     sparse_rank_map: Dict[int, int] = {}
     doc_lookup: Dict[int, Dict[str, Any]] = {}
 
-    # 1. Map Dense Ranks
     for rank, item in enumerate(dense_results):
         doc_idx = item.get("_doc_idx")
         if doc_idx is None:
-            # Match by text
             for i, doc in enumerate(all_documents):
                 if doc.get("text") == item.get("text"):
                     doc_idx = i
@@ -145,7 +209,6 @@ def reciprocal_rank_fusion(
             doc_lookup[doc_idx] = item
             rrf_scores[doc_idx] = rrf_scores.get(doc_idx, 0.0) + (1.0 / (k + rank + 1))
 
-    # 2. Map Sparse (BM25) Ranks
     for rank, (doc_idx, bm25_score) in enumerate(sparse_results):
         if 0 <= doc_idx < len(all_documents):
             sparse_rank_map[doc_idx] = rank + 1
@@ -153,7 +216,6 @@ def reciprocal_rank_fusion(
                 doc_lookup[doc_idx] = all_documents[doc_idx]
             rrf_scores[doc_idx] = rrf_scores.get(doc_idx, 0.0) + (1.0 / (k + rank + 1))
 
-    # Sort fused results by RRF score descending
     sorted_indices = sorted(rrf_scores.keys(), key=lambda idx: rrf_scores[idx], reverse=True)
 
     fused_results = []
@@ -180,7 +242,6 @@ _cross_encoder = None
 
 
 def get_cross_encoder():
-    """Lazy load Cross-Encoder reranker."""
     global _cross_encoder
     if _cross_encoder is None:
         try:
@@ -197,10 +258,6 @@ def rerank_passages(
     passages: List[Dict[str, Any]],
     top_k: int = 4
 ) -> List[Dict[str, Any]]:
-    """
-    Cross-Encoder Reranking:
-    Re-scores candidate passages using joint query-document cross-attention.
-    """
     if not passages or not query.strip():
         return []
 
@@ -214,23 +271,29 @@ def rerank_passages(
             for i, p in enumerate(passages):
                 raw_s = float(scores[i])
                 prob_s = 1.0 / (1.0 + math.exp(-raw_s)) if raw_s < 40 else 1.0
+                
+                # De-prioritize TOC/syllabus chunks in cross-reranker
+                if is_index_or_syllabus_chunk(p.get("text", "")):
+                    prob_s = prob_s * 0.4
+                    
                 p["rerank_score"] = round(prob_s, 4)
                 p["original_score"] = p.get("score", 0.0)
 
-            # Sort by rerank score descending
             passages.sort(key=lambda x: x.get("rerank_score", 0.0), reverse=True)
             return passages[:top_k]
         except Exception as e:
             print(f"[Reranker] Cross-encoder inference failed ({e}). Fallback to rank ordering.")
 
-    # Fallback: Term overlap + density cross-scoring
-    query_tokens = set(tokenize(query)) - STOPWORDS
+    # Fallback: Phrase & n-gram cross-scorer
+    query_tokens = [stem_term(t) for t in tokenize(query) if t not in STOPWORDS]
     for p in passages:
         text = p.get("text", "").lower()
         score = 0.0
         for t in query_tokens:
             if t in text:
-                score += text.count(t) * 1.5
+                score += 2.0
+        if is_index_or_syllabus_chunk(text):
+            score = max(0.1, score * 0.3)
         p["rerank_score"] = round(min(score / (score + 5.0), 0.99) if score > 0 else 0.1, 4)
 
     passages.sort(key=lambda x: x.get("rerank_score", 0.0), reverse=True)
@@ -238,21 +301,16 @@ def rerank_passages(
 
 
 def generate_hyde_passage(query: str, api_key: Optional[str] = None) -> str:
-    """
-    Hypothetical Document Embeddings (HyDE):
-    Generates a concise hypothetical document snippet to capture answer-space semantic manifold.
-    """
     if not query or not query.strip():
         return query
 
-    # If Gemini API key is available, generate high-quality hypothetical passage
     if api_key:
         try:
             import requests
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
             prompt = (
                 f"Write a concise, factual 2-sentence technical paragraph answering the question: '{query}'. "
-                "Include core terminology and definitions as if extracted from an engineering document."
+                "Include core terminology, definitions, and code syntax as if extracted from an engineering textbook."
             )
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
@@ -267,16 +325,13 @@ def generate_hyde_passage(query: str, api_key: Optional[str] = None) -> str:
         except Exception:
             pass
 
-    # Heuristic HyDE expansion: extract key entities and formulate semantic intent
     tokens = [t for t in tokenize(query) if t not in STOPWORDS]
-    return f"{query} technical description definition and mechanism for {' '.join(tokens)}"
+    return f"{query} definition mechanism characteristics syntax and code implementation for {' '.join(tokens)}"
 
 
 class CRAGGrader:
     """
-    Corrective RAG (CRAG) Document Relevance Grader:
-    Evaluates retrieved chunks, tags them as RELEVANT, PARTIALLY_RELEVANT, or IRRELEVANT,
-    and filters out noisy background syllabus or mismatched sections.
+    Corrective RAG (CRAG) Document Relevance Grader with TOC/Syllabus filtering.
     """
     @staticmethod
     def grade_documents(
@@ -287,9 +342,9 @@ class CRAGGrader:
         if not documents:
             return [], {"total": 0, "relevant": 0, "filtered": 0, "confidence": 0.0}
 
-        query_tokens = set(tokenize(query)) - STOPWORDS
+        query_tokens = [stem_term(t) for t in tokenize(query) if t not in STOPWORDS]
         if not query_tokens:
-            query_tokens = set(tokenize(query))
+            query_tokens = [stem_term(t) for t in tokenize(query)]
 
         graded_docs = []
         relevant_count = 0
@@ -300,23 +355,20 @@ class CRAGGrader:
             meta = doc.get("metadata", {})
             t_lower = text.lower()
 
-            # 1. Keyword coverage ratio
+            # 1. Keyword coverage ratio with stemming
             matched_keywords = [t for t in query_tokens if t in t_lower]
             keyword_ratio = len(matched_keywords) / max(len(query_tokens), 1)
 
-            # 2. Structural penalty for unrelated uppercase headers
+            # 2. Penalty for TOC/Syllabus and mismatched headers
             penalty = 0.0
-            header_match = re.match(r'^([A-Z\s]{3,25}):', text.strip())
-            if header_match:
-                hdr = header_match.group(1).lower()
-                if not any(k in hdr for k in query_tokens if len(k) > 2):
-                    penalty = 0.25
+            if is_index_or_syllabus_chunk(text):
+                penalty += 0.45
 
             # 3. Base similarity / rerank score
             base_score = doc.get("rerank_score", doc.get("score", 0.5))
             final_grade_score = max(0.0, (0.5 * base_score) + (0.5 * keyword_ratio) - penalty)
 
-            if final_grade_score >= 0.45:
+            if final_grade_score >= 0.40 and not is_index_or_syllabus_chunk(text):
                 grade = "RELEVANT"
                 relevant_count += 1
             elif final_grade_score >= min_relevance:
@@ -336,7 +388,6 @@ class CRAGGrader:
 
         avg_confidence = round(total_score / max(len(documents), 1), 3)
 
-        # Fallback: if all chunks got filtered out, keep top 1 with warning tag
         if not graded_docs and documents:
             fallback = documents[0].copy()
             fallback["crag_grade"] = "PARTIALLY_RELEVANT"
@@ -354,17 +405,13 @@ class CRAGGrader:
 
 
 class SelfRAGVerifier:
-    """
-    Self-RAG Grounding & Faithfulness Verifier:
-    Validates that the generated answer is strictly grounded in the cited source context.
-    """
     @staticmethod
     def verify_answer(answer: str, context: str, query: str) -> Dict[str, Any]:
         if not answer or not context:
             return {"grounding_score": 0.0, "is_grounded": False, "verdict": "Unverified"}
 
-        ans_tokens = set(tokenize(answer)) - STOPWORDS
-        ctx_tokens = set(tokenize(context))
+        ans_tokens = set([stem_term(t) for t in tokenize(answer) if t not in STOPWORDS])
+        ctx_tokens = set([stem_term(t) for t in tokenize(context)])
 
         if not ans_tokens:
             return {"grounding_score": 1.0, "is_grounded": True, "verdict": "Grounded"}
@@ -372,8 +419,8 @@ class SelfRAGVerifier:
         overlap = ans_tokens.intersection(ctx_tokens)
         grounding_score = round(len(overlap) / max(len(ans_tokens), 1), 3)
 
-        is_grounded = grounding_score >= 0.50
-        verdict = "Fully Grounded" if grounding_score >= 0.70 else ("Partially Grounded" if is_grounded else "Low Grounding Risk")
+        is_grounded = grounding_score >= 0.45
+        verdict = "Fully Grounded" if grounding_score >= 0.65 else ("Partially Grounded" if is_grounded else "Low Grounding Risk")
 
         return {
             "grounding_score": grounding_score,

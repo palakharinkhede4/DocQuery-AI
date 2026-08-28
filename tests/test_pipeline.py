@@ -4,7 +4,7 @@ from src.parsers import parse_document
 from src.vectorstore import FAISSVectorStore, get_vector_store, clear_session_store
 from src.pipeline import run_pipeline
 from src.ingest import ingest_file_objects
-from src.advanced_rag import BM25Index, reciprocal_rank_fusion, CRAGGrader, SelfRAGVerifier
+from src.advanced_rag import BM25Index, reciprocal_rank_fusion, CRAGGrader, SelfRAGVerifier, is_index_or_syllabus_chunk
 
 
 class TestLocalRAGPipeline(unittest.TestCase):
@@ -35,6 +35,40 @@ class TestLocalRAGPipeline(unittest.TestCase):
         self.assertEqual(top_idx, 2)
         self.assertIn("Cross-Encoder", docs[top_idx]["text"])
 
+    def test_syllabus_index_debiasing_and_exact_phrase_ranking(self):
+        """
+        Verify that a substantive lecture chunk (e.g. Page 42 on Private member functions)
+        is ranked significantly higher than a syllabus or table of contents chunk.
+        """
+        docs = [
+            {
+                "text": "SYLLABUS: PCCS2207 Object Oriented Programming. Module II: Abstraction mechanism: Classes, private, public, constructors, destructors, member data, member functions, inline function, friend functions, static members.",
+                "metadata": {"source": "oops_notes.pdf", "page": 3}
+            },
+            {
+                "text": "CONTENTS: Lecture 01: Introduction Lecture 02: OOP Lecture 13: Class Lecture 14: Member Function Lecture 15: Nesting of Member function Lecture 16: Array with Class.",
+                "metadata": {"source": "oops_notes.pdf", "page": 4}
+            },
+            {
+                "text": "Private member functions: Although it is a normal practice to place all data items in private section and functions in public, some situations require functions to be hidden. A private member function can only be called by another function that is a member of its class. Even an object cannot invoke a private function using the dot operator.",
+                "metadata": {"source": "oops_notes.pdf", "page": 42}
+            }
+        ]
+
+        self.assertTrue(is_index_or_syllabus_chunk(docs[0]["text"]))
+        self.assertTrue(is_index_or_syllabus_chunk(docs[1]["text"]))
+        self.assertFalse(is_index_or_syllabus_chunk(docs[2]["text"]))
+
+        bm25 = BM25Index()
+        bm25.build_index(docs)
+        results = bm25.search("what are Private member functions?", top_k=3)
+
+        self.assertGreater(len(results), 0)
+        top_idx, top_score = results[0]
+        # The substantive content on page 42 must be rank #1!
+        self.assertEqual(top_idx, 2)
+        self.assertIn("Private member functions:", docs[top_idx]["text"])
+
     def test_reciprocal_rank_fusion(self):
         docs = [
             {"text": "Doc A: Exact keyword match and semantic match.", "metadata": {"source": "a.txt"}},
@@ -46,7 +80,6 @@ class TestLocalRAGPipeline(unittest.TestCase):
 
         fused = reciprocal_rank_fusion(dense_ranks, sparse_ranks, docs, k=60, top_k=2)
         self.assertGreater(len(fused), 0)
-        # Doc 0 is present in both rankings so its RRF score should rank it #1
         self.assertEqual(fused[0]["text"], docs[0]["text"])
 
     def test_crag_grading(self):

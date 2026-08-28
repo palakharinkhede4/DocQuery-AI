@@ -38,10 +38,13 @@ export async function POST(req: NextRequest) {
       Number(top_k),
       Number(min_score),
       customApiKey,
-      use_hybrid,
-      use_reranking,
-      use_hyde,
-      use_crag
+      {
+        useHybrid: Boolean(use_hybrid),
+        useReranking: Boolean(use_reranking),
+        useHyde: Boolean(use_hyde),
+        useCrag: Boolean(use_crag),
+        useSelfRag: Boolean(use_self_rag),
+      }
     );
 
     // 2. Structured Answer Generation with Self-RAG verification

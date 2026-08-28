@@ -61,6 +61,21 @@ const STOPWORDS = new Set([
   "yourself", "yourselves"
 ]);
 
+/**
+ * Lightweight technical morphological stemmer
+ */
+function stemTerm(word: string): string {
+  const w = word.toLowerCase().trim();
+  if (w.length <= 3) return w;
+  if (w.endsWith("sses")) return w.slice(0, -2);
+  if (w.endsWith("ies") && w.length > 4) return w.slice(0, -3) + "y";
+  if (w.endsWith("ss")) return w;
+  if (w.endsWith("s") && w.length > 3) return w.slice(0, -1);
+  if (w.endsWith("ing") && w.length > 5) return w.slice(0, -3);
+  if (w.endsWith("ed") && w.length > 4) return w.slice(0, -2);
+  return w;
+}
+
 // Tokenizer & Term Frequency
 function tokenize(text: string): string[] {
   return text
@@ -73,9 +88,30 @@ function tokenize(text: string): string[] {
 function computeTermFrequencies(tokens: string[]): Record<string, number> {
   const tf: Record<string, number> = {};
   for (const token of tokens) {
-    tf[token] = (tf[token] || 0) + 1;
+    const stemmed = stemTerm(token);
+    tf[stemmed] = (tf[stemmed] || 0) + 1;
   }
   return tf;
+}
+
+/**
+ * Detect if a chunk is a Table of Contents, Syllabus, or Navigation Index
+ */
+function isIndexOrSyllabusChunk(text: string): boolean {
+  if (!text) return false;
+  const tLower = text.toLowerCase();
+  
+  if (tLower.startsWith("syllabus") || tLower.startsWith("contents")) return true;
+  
+  const lectureMatches = tLower.match(/lecture\s*\d+\s*:/g);
+  if (lectureMatches && lectureMatches.length >= 3) return true;
+  
+  const moduleMatches = tLower.match(/module\s*[-–—:]?\s*(?:i|ii|iii|iv|v|\d+)/g);
+  if (moduleMatches && moduleMatches.length >= 2 && tLower.length < 600) return true;
+  
+  if (tLower.includes("text books:") || tLower.includes("reference books:")) return true;
+  
+  return false;
 }
 
 // Dense Vector Cosine Similarity
@@ -93,7 +129,7 @@ function cosineSimilarity(vecA: number[], vecB: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-// BM25 Ranking Score
+// BM25 Ranking Score with N-gram, Heading & Explanatory Boost
 function computeBM25Score(
   queryKeywords: string[],
   chunk: DocumentChunk,
@@ -107,8 +143,9 @@ function computeBM25Score(
   const docLen = Object.values(chunkTf).reduce((acc, v) => acc + v, 0);
 
   let score = 0;
+  const stemmedKeywords = queryKeywords.map(stemTerm);
 
-  for (const word of queryKeywords) {
+  for (const word of stemmedKeywords) {
     const tf = chunkTf[word] || 0;
     if (tf > 0) {
       const df = docFreqs[word] || 1;
@@ -119,10 +156,45 @@ function computeBM25Score(
     }
   }
 
-  // Exact phrase match boost
-  const rawQuery = queryKeywords.join(" ");
-  if (rawQuery.length > 4 && chunk.text.toLowerCase().includes(rawQuery)) {
-    score += 5.0;
+  const chunkLower = chunk.text.toLowerCase();
+  const exactPhrase = queryKeywords.join(" ").toLowerCase();
+
+  // 1. Exact full phrase match boost (+12.0)
+  if (exactPhrase.length > 4 && chunkLower.includes(exactPhrase)) {
+    score += 12.0;
+  }
+
+  // 2. Heading match boost (+15.0): if phrase appears at line start
+  const firstLines = chunkLower.split("\n").slice(0, 3).join("\n");
+  if (exactPhrase.length > 4 && firstLines.includes(exactPhrase)) {
+    score += 15.0;
+  }
+
+  // 3. Bigram phrase match boost (+4.0 each)
+  if (queryKeywords.length >= 2) {
+    for (let i = 0; i < queryKeywords.length - 1; i++) {
+      const bg = `${queryKeywords[i]} ${queryKeywords[i + 1]}`.toLowerCase();
+      if (bg.length > 4 && chunkLower.includes(bg)) {
+        score += 4.0;
+      }
+    }
+  }
+
+  // 4. Explanatory prose boost (+3.0)
+  if (
+    chunkLower.includes("is a") ||
+    chunkLower.includes("can only be") ||
+    chunkLower.includes("defined as") ||
+    chunkLower.includes("refers to") ||
+    chunkLower.includes("syntax:") ||
+    chunkLower.includes("class ")
+  ) {
+    score += 3.0;
+  }
+
+  // 5. TOC / Syllabus Penalty (-12.0)
+  if (isIndexOrSyllabusChunk(chunk.text)) {
+    score = Math.max(0.1, score * 0.25 - 8.0);
   }
 
   return score;
@@ -142,8 +214,8 @@ export async function generateGeminiEmbedding(text: string, apiKey: string): Pro
 /**
  * Hypothetical Document Embeddings (HyDE)
  */
-export async function generateHydePassage(query: string, apiKey?: string): Promise<string> {
-  if (!query || !query.trim()) return query;
+async function generateHyDE(query: string, apiKey?: string): Promise<string> {
+  if (!query) return query;
 
   if (apiKey) {
     try {
@@ -175,7 +247,8 @@ function rerankPassages(
   passages: { chunk: DocumentChunk; score: number; denseRank?: number; sparseRank?: number; rrfScore?: number }[],
   topK = 4
 ) {
-  const queryTokens = new Set(tokenize(query).filter((t) => !STOPWORDS.has(t)));
+  const queryTokens = new Set(tokenize(query).filter((t) => !STOPWORDS.has(t)).map(stemTerm));
+  const exactPhrase = Array.from(queryTokens).join(" ").toLowerCase();
 
   for (const item of passages) {
     const textLower = item.chunk.text.toLowerCase();
@@ -188,13 +261,22 @@ function rerankPassages(
     }
 
     // Exact phrase match bonus
-    const phrase = Array.from(queryTokens).join(" ");
-    if (phrase.length > 3 && textLower.includes(phrase)) {
-      crossScore += 4.0;
+    if (exactPhrase.length > 3 && textLower.includes(exactPhrase)) {
+      crossScore += 6.0;
+    }
+
+    // Explanatory definition bonus
+    if (textLower.includes("can only be") || textLower.includes("is a") || textLower.includes("defined as")) {
+      crossScore += 3.0;
+    }
+
+    // TOC / Syllabus penalty
+    if (isIndexOrSyllabusChunk(item.chunk.text)) {
+      crossScore = Math.max(0.1, crossScore * 0.2);
     }
 
     const baseNormalized = item.score || 0.5;
-    const rerankProb = Math.min(Math.max((0.5 * baseNormalized) + (0.5 * (crossScore / (crossScore + 6))), 0.05), 0.99);
+    const rerankProb = Math.min(Math.max((0.4 * baseNormalized) + (0.6 * (crossScore / (crossScore + 5))), 0.05), 0.99);
     item.score = Math.round(rerankProb * 1000) / 1000;
   }
 
@@ -213,7 +295,7 @@ function gradeDocumentsCRAG(
   filtered: { chunk: DocumentChunk; score: number; cragGrade: "RELEVANT" | "PARTIALLY_RELEVANT" | "IRRELEVANT"; cragScore: number; matchedKeywords: string[] }[];
   stats: CRAGStats;
 } {
-  const queryTokens = new Set(tokenize(query).filter((w) => !STOPWORDS.has(w)));
+  const queryTokens = new Set(tokenize(query).filter((w) => !STOPWORDS.has(w)).map(stemTerm));
   const results = [];
   let relevantCount = 0;
   let totalScore = 0;
@@ -223,21 +305,17 @@ function gradeDocumentsCRAG(
     const matched = Array.from(queryTokens).filter((t) => text.includes(t));
     const coverage = matched.length / Math.max(queryTokens.size, 1);
 
-    // Negative penalty for mismatched uppercase section headers
+    // Negative penalty for TOC/Syllabus and mismatched uppercase headers
     let penalty = 0;
-    const headerMatch = item.chunk.text.trim().match(/^([A-Z\s]{3,25}):/);
-    if (headerMatch) {
-      const header = headerMatch[1].toLowerCase();
-      if (!Array.from(queryTokens).some((k) => header.includes(k))) {
-        penalty = 0.2;
-      }
+    if (isIndexOrSyllabusChunk(item.chunk.text)) {
+      penalty += 0.40;
     }
 
     const finalGradeScore = Math.max(0, (0.5 * item.score) + (0.5 * coverage) - penalty);
     totalScore += finalGradeScore;
 
     let grade: "RELEVANT" | "PARTIALLY_RELEVANT" | "IRRELEVANT" = "IRRELEVANT";
-    if (finalGradeScore >= 0.40) {
+    if (finalGradeScore >= 0.38 && !isIndexOrSyllabusChunk(item.chunk.text)) {
       grade = "RELEVANT";
       relevantCount++;
     } else if (finalGradeScore >= minScore) {
@@ -254,33 +332,54 @@ function gradeDocumentsCRAG(
     });
   }
 
-  const valid = results.filter((r) => r.cragGrade !== "IRRELEVANT");
-  const finalFiltered = valid.length > 0 ? valid : [results[0]];
+  const filtered = results.filter((r) => r.cragGrade !== "IRRELEVANT");
+  const finalFiltered = filtered.length > 0 ? filtered : [results[0]];
 
-  return {
-    filtered: finalFiltered,
-    stats: {
-      totalRetrieved: passages.length,
-      relevantCount,
-      filteredCount: passages.length - valid.length,
-      retrievalConfidence: Math.round((totalScore / Math.max(passages.length, 1)) * 100) / 100,
-    },
+  const stats: CRAGStats = {
+    totalRetrieved: passages.length,
+    relevantCount,
+    filteredCount: passages.length - finalFiltered.length,
+    retrievalConfidence: Math.round((totalScore / Math.max(passages.length, 1)) * 100) / 100,
   };
+
+  return { filtered: finalFiltered, stats };
 }
 
 export class VectorStoreManager {
+  static getStore(sessionId: string): SessionStore {
+    return getOrCreateStore(sessionId);
+  }
+
+  static getStats(sessionId: string): SessionStats {
+    const store = getOrCreateStore(sessionId);
+    return {
+      session_id: sessionId,
+      totalDocuments: store.files.size,
+      totalChunks: store.chunks.length,
+      files: Array.from(store.files),
+      embeddingType: "BM25 + Gemini text-embedding-004",
+      llmModel: "Gemini 2.0 Flash / Structured Extractive Synthesizer",
+    };
+  }
+
+  static clearSession(sessionId: string): void {
+    if (stores.has(sessionId)) {
+      stores.delete(sessionId);
+    }
+  }
+
   static async addChunks(
     sessionId: string,
-    newChunks: DocumentChunk[],
+    chunks: DocumentChunk[],
     apiKey?: string
   ): Promise<number> {
     const store = getOrCreateStore(sessionId);
 
-    for (const chunk of newChunks) {
+    for (const chunk of chunks) {
       const tokens = tokenize(chunk.text);
       chunk.termFrequencies = computeTermFrequencies(tokens);
 
-      if (apiKey) {
+      if (apiKey && !chunk.embedding) {
         const emb = await generateGeminiEmbedding(chunk.text, apiKey);
         if (emb) {
           chunk.embedding = emb;
@@ -300,238 +399,225 @@ export class VectorStoreManager {
     topK = 4,
     minScore = 0.20,
     apiKey?: string,
-    useHybrid = true,
-    useReranking = true,
-    useHyde = false,
-    useCrag = true
+    config: {
+      useHybrid?: boolean;
+      useReranking?: boolean;
+      useHyde?: boolean;
+      useCrag?: boolean;
+      useSelfRag?: boolean;
+    } = {}
   ): Promise<{ sources: SourceCitation[]; trace: PipelineTrace }> {
     const store = getOrCreateStore(sessionId);
-    const trace: PipelineTrace = {
-      originalQuery: query,
-      hydeExpanded: false,
-      hydeQuery: null,
-      hybridEnabled: useHybrid,
-      rerankingEnabled: useReranking,
-      cragEnabled: useCrag,
-      steps: [],
-    };
+    const traceSteps: string[] = [];
+    let hydeQuery: string | undefined = undefined;
 
-    if (store.chunks.length === 0 || !query.trim()) {
-      return { sources: [], trace };
+    if (store.chunks.length === 0) {
+      return {
+        sources: [],
+        trace: {
+          originalQuery: query,
+          hydeExpanded: false,
+          hybridEnabled: config.useHybrid ?? true,
+          rerankingEnabled: config.useReranking ?? true,
+          cragEnabled: config.useCrag ?? true,
+          steps: ["No active document chunks in session vector store."],
+        },
+      };
     }
 
-    const queryClean = query.trim();
-    let searchQuery = queryClean;
-
-    // 1. HyDE Query Expansion
+    // 1. HyDE Expansion
+    let effectiveQuery = query;
+    const useHyde = config.useHyde ?? false;
     if (useHyde) {
-      const hydePassage = await generateHydePassage(queryClean, apiKey);
-      if (hydePassage && hydePassage !== queryClean) {
-        searchQuery = hydePassage;
-        trace.hydeExpanded = true;
-        trace.hydeQuery = hydePassage;
-        trace.steps.push("HyDE: Formulated hypothetical domain answer for semantic indexing.");
-      }
+      hydeQuery = await generateHyDE(query, apiKey);
+      effectiveQuery = hydeQuery;
+      traceSteps.push("HyDE: Formulated hypothetical domain answer for semantic indexing.");
     }
 
-    // 2. Query Embedding
-    let queryEmb: number[] | null = null;
-    if (apiKey) {
-      queryEmb = await generateGeminiEmbedding(searchQuery, apiKey);
-    }
+    const queryTokens = tokenize(effectiveQuery);
+    const queryKeywords = queryTokens.filter((w) => !STOPWORDS.has(w));
+    const effectiveKeywords = queryKeywords.length > 0 ? queryKeywords : queryTokens;
 
-    // 3. BM25 Setup
-    const allTokens = tokenize(queryClean);
-    const queryKeywords = allTokens.filter((w) => !STOPWORDS.has(w));
-    const effectiveKeywords = queryKeywords.length > 0 ? queryKeywords : allTokens;
-
-    const totalDocs = store.chunks.length;
+    // Document frequencies for BM25
     const docFreqs: Record<string, number> = {};
-    let totalLen = 0;
-
-    for (const chunk of store.chunks) {
-      const tf = chunk.termFrequencies || {};
-      totalLen += Object.values(tf).reduce((acc, v) => acc + v, 0);
-      for (const word of Object.keys(tf)) {
-        docFreqs[word] = (docFreqs[word] || 0) + 1;
+    let totalTokens = 0;
+    for (const ch of store.chunks) {
+      const tf = ch.termFrequencies || {};
+      const stemmedWords = Object.keys(tf);
+      totalTokens += Object.values(tf).reduce((acc, v) => acc + v, 0);
+      for (const w of stemmedWords) {
+        docFreqs[w] = (docFreqs[w] || 0) + 1;
       }
     }
-    const avgDocLen = totalLen / Math.max(totalDocs, 1);
+    const avgDocLen = totalTokens / Math.max(store.chunks.length, 1);
 
-    // Compute Dense Ranks
-    const denseRanked: { chunk: DocumentChunk; score: number }[] = [];
-    if (queryEmb) {
-      for (const chunk of store.chunks) {
-        if (chunk.embedding) {
-          const sim = cosineSimilarity(queryEmb, chunk.embedding);
-          denseRanked.push({ chunk, score: sim });
-        }
-      }
-      denseRanked.sort((a, b) => b.score - a.score);
+    // Expand initial candidate pool (at least 45 chunks or all chunks)
+    const initialPool = Math.min(store.chunks.length, Math.max(topK * 10, 45));
+
+    // 2. Sparse BM25 Ranking
+    const sparseRanked = store.chunks
+      .map((chunk) => ({
+        chunk,
+        score: computeBM25Score(effectiveKeywords, chunk, docFreqs, store.chunks.length, avgDocLen),
+      }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, initialPool);
+
+    // 3. Dense Embedding Search
+    let queryEmbedding: number[] | null = null;
+    if (apiKey) {
+      queryEmbedding = await generateGeminiEmbedding(effectiveQuery, apiKey);
     }
 
-    // Compute Sparse BM25 Ranks
-    const sparseRanked: { chunk: DocumentChunk; score: number }[] = [];
-    for (const chunk of store.chunks) {
-      const bm25 = computeBM25Score(effectiveKeywords, chunk, docFreqs, totalDocs, avgDocLen);
-      sparseRanked.push({ chunk, score: bm25 });
+    let denseRanked: { chunk: DocumentChunk; score: number }[] = [];
+    if (queryEmbedding) {
+      denseRanked = store.chunks
+        .filter((chunk) => chunk.embedding && chunk.embedding.length > 0)
+        .map((chunk) => ({
+          chunk,
+          score: cosineSimilarity(queryEmbedding!, chunk.embedding!),
+        }))
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, initialPool);
     }
-    sparseRanked.sort((a, b) => b.score - a.score);
 
     // 4. Hybrid Reciprocal Rank Fusion (RRF)
-    const initialPool = Math.max(topK * 3, 10);
-    let candidateList: { chunk: DocumentChunk; score: number; denseRank?: number; sparseRank?: number; rrfScore?: number }[] = [];
+    const useHybrid = config.useHybrid ?? true;
+    let candidates: { chunk: DocumentChunk; score: number; denseRank?: number; sparseRank?: number; rrfScore?: number }[] = [];
 
-    if (useHybrid && queryEmb && denseRanked.length > 0) {
-      const rrfScores = new Map<string, { chunk: DocumentChunk; rrf: number; denseRank: number; sparseRank: number }>();
-      const k = 60;
+    if (useHybrid && denseRanked.length > 0) {
+      const RRF_K = 60;
+      const rrfMap = new Map<string, { chunk: DocumentChunk; score: number; denseRank: number; sparseRank: number; rrfScore: number }>();
 
-      denseRanked.slice(0, initialPool).forEach((item, r) => {
-        const id = item.chunk.id;
-        rrfScores.set(id, {
+      denseRanked.forEach((item, r) => {
+        const rank = r + 1;
+        const rrf = 1 / (RRF_K + rank);
+        rrfMap.set(item.chunk.id, {
           chunk: item.chunk,
-          rrf: (1 / (k + r + 1)),
-          denseRank: r + 1,
+          score: item.score,
+          denseRank: rank,
           sparseRank: 999,
+          rrfScore: rrf,
         });
       });
 
-      sparseRanked.slice(0, initialPool).forEach((item, r) => {
-        const id = item.chunk.id;
-        if (rrfScores.has(id)) {
-          const entry = rrfScores.get(id)!;
-          entry.rrf += (1 / (k + r + 1));
-          entry.sparseRank = r + 1;
+      sparseRanked.forEach((item, r) => {
+        const rank = r + 1;
+        const rrf = 1 / (RRF_K + rank);
+        if (rrfMap.has(item.chunk.id)) {
+          const existing = rrfMap.get(item.chunk.id)!;
+          existing.sparseRank = rank;
+          existing.rrfScore += rrf;
+          existing.score = Math.max(existing.score, item.score);
         } else {
-          rrfScores.set(id, {
+          rrfMap.set(item.chunk.id, {
             chunk: item.chunk,
-            rrf: (1 / (k + r + 1)),
+            score: item.score,
             denseRank: 999,
-            sparseRank: r + 1,
+            sparseRank: rank,
+            rrfScore: rrf,
           });
         }
       });
 
-      candidateList = Array.from(rrfScores.values()).map((v) => ({
-        chunk: v.chunk,
-        score: Math.min(v.rrf * 30, 1.0),
-        denseRank: v.denseRank,
-        sparseRank: v.sparseRank,
-        rrfScore: Math.round(v.rrf * 10000) / 10000,
-      }));
+      candidates = Array.from(rrfMap.values())
+        .sort((a, b) => b.rrfScore - a.rrfScore)
+        .slice(0, initialPool);
 
-      candidateList.sort((a, b) => (b.rrfScore || 0) - (a.rrfScore || 0));
-      trace.steps.push("Hybrid Retrieval: Combined Dense Vector + BM25 rankings via Reciprocal Rank Fusion (k=60).");
+      traceSteps.push(`Hybrid Retrieval: Dense (${denseRanked.length}) + Sparse BM25 (${sparseRanked.length}) merged via RRF (k=60).`);
     } else {
-      const sourceList = denseRanked.length > 0 ? denseRanked : sparseRanked;
-      candidateList = sourceList.slice(0, initialPool).map((item, idx) => ({
+      const sourceList = sparseRanked.length > 0 ? sparseRanked : denseRanked;
+      candidates = sourceList.map((item, idx) => ({
         chunk: item.chunk,
-        score: item.score > 0 ? Math.min(item.score / (item.score + 5), 1.0) : 0,
-        denseRank: idx + 1,
+        score: item.score,
+        denseRank: -1,
         sparseRank: idx + 1,
-        rrfScore: Math.round(item.score * 100) / 100,
       }));
-      trace.steps.push("Lexical/Dense Retrieval: Standard rank scoring applied.");
+      traceSteps.push("Lexical/Dense Retrieval: Standard rank scoring applied.");
     }
 
-    // 5. Cross-Encoder / Cross-Scoring Reranker
-    if (useReranking && candidateList.length > 0) {
-      candidateList = rerankPassages(queryClean, candidateList, initialPool);
-      trace.steps.push("Cross-Encoder Reranking: Multi-pass relevance attention rescoring applied.");
+    // 5. Cross-Encoder Multi-Pass Reranking
+    const useRerank = config.useReranking ?? true;
+    if (useRerank) {
+      candidates = rerankPassages(query, candidates, Math.max(topK * 2, 8));
+      traceSteps.push("Cross-Encoder Reranking: Multi-pass relevance attention rescoring applied.");
     }
 
-    // 6. CRAG Document Relevance Grading
-    let finalSources: SourceCitation[] = [];
-    if (useCrag && candidateList.length > 0) {
-      const cragResult = gradeDocumentsCRAG(queryClean, candidateList, minScore);
-      trace.cragStats = cragResult.stats;
-      trace.steps.push(`CRAG Grading: ${cragResult.stats.relevantCount} relevant passages verified, ${cragResult.stats.filteredCount} noise chunks filtered.`);
+    // 6. Corrective RAG (CRAG) Document Grading
+    const useCrag = config.useCrag ?? true;
+    let cragStats: CRAGStats | undefined = undefined;
+    let finalCandidates: { chunk: DocumentChunk; score: number; cragGrade?: "RELEVANT" | "PARTIALLY_RELEVANT" | "IRRELEVANT"; cragScore?: number; matchedKeywords?: string[] }[] = candidates;
 
-      finalSources = cragResult.filtered.slice(0, topK).map((item) => ({
-        source: item.chunk.source,
-        page: item.chunk.page,
-        snippet: item.chunk.text.slice(0, 160) + "...",
-        fullText: item.chunk.text,
-        score: Math.round(item.score * 1000) / 1000,
-        cragGrade: item.cragGrade,
-        cragScore: item.cragScore,
-        matchedKeywords: item.matchedKeywords,
-      }));
-    } else {
-      const filtered = candidateList.filter((item) => item.score >= minScore);
-      const results = filtered.length > 0 ? filtered.slice(0, topK) : candidateList.slice(0, 1);
-      finalSources = results.map((item) => ({
-        source: item.chunk.source,
-        page: item.chunk.page,
-        snippet: item.chunk.text.slice(0, 160) + "...",
-        fullText: item.chunk.text,
-        score: Math.round(item.score * 1000) / 1000,
-        denseRank: item.denseRank,
-        sparseRank: item.sparseRank,
-        rrfScore: item.rrfScore,
-      }));
+    if (useCrag) {
+      const { filtered, stats } = gradeDocumentsCRAG(query, candidates, minScore);
+      cragStats = stats;
+      finalCandidates = filtered;
+      traceSteps.push(`CRAG Grading: ${stats.relevantCount} relevant passages verified, ${stats.filteredCount} noise chunks filtered.`);
     }
 
-    return { sources: finalSources, trace };
+    const topCandidates = finalCandidates.slice(0, topK);
+
+    const sources: SourceCitation[] = topCandidates.map((c) => ({
+      id: c.chunk.id,
+      source: c.chunk.source,
+      page: c.chunk.page,
+      snippet: c.chunk.text.length > 250 ? c.chunk.text.slice(0, 250) + "..." : c.chunk.text,
+      fullText: c.chunk.text,
+      score: c.score,
+      cragGrade: c.cragGrade,
+      cragScore: c.cragScore,
+      denseRank: "denseRank" in c ? (c as any).denseRank : undefined,
+      sparseRank: "sparseRank" in c ? (c as any).sparseRank : undefined,
+    }));
+
+    return {
+      sources,
+      trace: {
+        originalQuery: query,
+        hydeExpanded: useHyde,
+        hydeQuery,
+        hybridEnabled: useHybrid,
+        rerankingEnabled: useRerank,
+        cragEnabled: useCrag,
+        steps: traceSteps,
+        cragStats,
+      },
+    };
   }
 
-  static async search(
+  static async loadDemoDocuments(
     sessionId: string,
-    query: string,
-    topK = 4,
-    minScore = 0.20,
     apiKey?: string
-  ): Promise<SourceCitation[]> {
-    const { sources } = await this.searchAdvanced(
-      sessionId,
-      query,
-      topK,
-      minScore,
-      apiKey,
-      true,
-      true,
-      false,
-      true
-    );
-    return sources;
-  }
-
-  static async loadDemoDocuments(sessionId: string, apiKey?: string): Promise<{ totalChunks: number; files: string[] }> {
+  ): Promise<{ totalChunks: number; documentsCount: number; files: string[] }> {
     const store = getOrCreateStore(sessionId);
     store.chunks = [];
     store.files.clear();
 
-    const allChunks: DocumentChunk[] = [];
+    const fileNames: string[] = [];
+
     for (const doc of DEMO_DOCUMENTS) {
-      const chunks = chunkText(doc.content, doc.name, 1000, 150);
-      allChunks.push(...chunks);
-    }
+      fileNames.push(doc.name);
+      const chunks = chunkText(doc.content, doc.name);
+      for (const chunk of chunks) {
+        const tokens = tokenize(chunk.text);
+        chunk.termFrequencies = computeTermFrequencies(tokens);
 
-    await this.addChunks(sessionId, allChunks, apiKey);
+        if (apiKey && !chunk.embedding) {
+          const emb = await generateGeminiEmbedding(chunk.text, apiKey);
+          if (emb) chunk.embedding = emb;
+        }
+
+        store.chunks.push(chunk);
+        store.files.add(chunk.source);
+      }
+    }
 
     return {
       totalChunks: store.chunks.length,
-      files: Array.from(store.files),
+      documentsCount: DEMO_DOCUMENTS.length,
+      files: fileNames,
     };
-  }
-
-  static getStats(sessionId: string): SessionStats {
-    const store = getOrCreateStore(sessionId);
-    const hasEmbeddings = store.chunks.some((c) => !!c.embedding);
-
-    return {
-      session_id: sessionId,
-      totalDocuments: store.files.size,
-      totalChunks: store.chunks.length,
-      files: Array.from(store.files),
-      embeddingType: hasEmbeddings ? "Hybrid BM25 + Gemini text-embedding-004" : "Hybrid BM25 + Vector Scoring Engine",
-      llmModel: "Gemini 2.0 Flash / 1.5 Flash",
-    };
-  }
-
-  static clearSession(sessionId: string): void {
-    if (stores.has(sessionId)) {
-      stores.delete(sessionId);
-    }
   }
 }

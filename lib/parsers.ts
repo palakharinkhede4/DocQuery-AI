@@ -57,13 +57,14 @@ export function cleanText(text: string): string {
 }
 
 /**
- * Chunk text into overlapping segments preserving sentence boundaries.
+ * Chunk text into overlapping segments preserving sentence & heading boundaries.
  */
 export function chunkText(
   fullText: string,
   sourceName: string,
   chunkSize = 1000,
-  overlap = 150
+  overlap = 150,
+  basePage = 1
 ): DocumentChunk[] {
   const cleaned = cleanText(fullText);
   if (!cleaned) return [];
@@ -73,14 +74,27 @@ export function chunkText(
 
   let currentBuffer: string[] = [];
   let currentLength = 0;
-  let chunkIndex = 1;
+  let chunkIndex = basePage;
+  let activeHeading = "";
 
   for (const para of paragraphs) {
     const trimmedPara = para.trim();
     if (!trimmedPara) continue;
 
+    // Detect section or lecture headings
+    const headingMatch = trimmedPara.match(/^(?:LECTURE\s*[-–—:]?\s*\d+|Module\s*[-–—:]?\s*\w+|[A-Z][A-Za-z\s]{3,35}:)/);
+    if (headingMatch && trimmedPara.length < 80) {
+      activeHeading = headingMatch[0].replace(/:$/, "").trim();
+    }
+
     if (currentLength + trimmedPara.length + 2 > chunkSize && currentBuffer.length > 0) {
-      const chunkString = currentBuffer.join("\n\n").trim();
+      let chunkString = currentBuffer.join("\n\n").trim();
+      
+      // If the chunk doesn't have the active heading at the start, prepend context breadcrumb
+      if (activeHeading && !chunkString.toLowerCase().includes(activeHeading.toLowerCase())) {
+        chunkString = `[Section: ${activeHeading}]\n${chunkString}`;
+      }
+
       if (chunkString.length > 30) {
         chunks.push({
           id: `${sourceName}-chunk-${chunkIndex}`,
@@ -107,7 +121,10 @@ export function chunkText(
   }
 
   if (currentBuffer.length > 0) {
-    const chunkString = currentBuffer.join("\n\n").trim();
+    let chunkString = currentBuffer.join("\n\n").trim();
+    if (activeHeading && !chunkString.toLowerCase().includes(activeHeading.toLowerCase())) {
+      chunkString = `[Section: ${activeHeading}]\n${chunkString}`;
+    }
     if (chunkString.length > 20) {
       chunks.push({
         id: `${sourceName}-chunk-${chunkIndex}`,
@@ -130,14 +147,42 @@ export async function parseDocument(
 ): Promise<{ text: string; chunks: DocumentChunk[] }> {
   const ext = fileName.slice(fileName.lastIndexOf(".")).toLowerCase();
   let extractedText = "";
+  const chunks: DocumentChunk[] = [];
 
   if (ext === ".pdf") {
     try {
-      const data = await pdfParse(buffer);
+      const pageTexts: { page: number; text: string }[] = [];
+      const pagerender = function (pageData: any) {
+        return pageData.getTextContent().then((textContent: any) => {
+          let text = "";
+          let lastY = 0;
+          for (const item of textContent.items) {
+            if (lastY === item.transform[5] || !lastY) {
+              text += item.str;
+            } else {
+              text += "\n" + item.str;
+            }
+            lastY = item.transform[5];
+          }
+          pageTexts.push({ page: pageData.pageIndex + 1, text: cleanText(text) });
+          return text;
+        });
+      };
+
+      const data = await pdfParse(buffer, { pagerender });
       extractedText = data.text || "";
+
+      // If page-by-page texts were extracted, chunk per page
+      if (pageTexts.length > 0) {
+        for (const pt of pageTexts) {
+          if (pt.text && pt.text.length > 20) {
+            const pageChunks = chunkText(pt.text, fileName, 1200, 150, pt.page);
+            chunks.push(...pageChunks);
+          }
+        }
+      }
     } catch (err) {
       console.warn(`PDF parse error for ${fileName}:`, err);
-      // Fallback binary string extraction
       extractedText = buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r\t]/g, " ");
     }
   } else if (ext === ".docx" || ext === ".doc") {
@@ -153,7 +198,12 @@ export async function parseDocument(
     extractedText = buffer.toString("utf-8");
   }
 
-  const chunks = chunkText(extractedText, fileName);
+  // If page-by-page didn't produce chunks, chunk full text
+  if (chunks.length === 0) {
+    const defaultChunks = chunkText(extractedText, fileName);
+    chunks.push(...defaultChunks);
+  }
+
   return {
     text: extractedText,
     chunks
