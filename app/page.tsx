@@ -19,12 +19,12 @@ async function parseResponseSafe<T>(res: Response): Promise<T> {
     data = text ? JSON.parse(text) : {};
   } catch {
     if (res.status === 413 || text.toLowerCase().includes("request entity too large")) {
-      throw new Error("Request payload is too large for the serverless limit (max 4.5MB).");
+      throw new Error("Uploaded content is too large (max 4.5MB). Please upload smaller files.");
     }
     if (!res.ok) {
-      throw new Error(`Server returned HTTP ${res.status}: ${text.slice(0, 120)}`);
+      throw new Error(`Server returned HTTP ${res.status}`);
     }
-    throw new Error(`Unexpected server response: ${text.slice(0, 120)}`);
+    throw new Error("Unexpected server response.");
   }
 
   if (!res.ok) {
@@ -38,15 +38,6 @@ export default function Home() {
   const [sessionId, setSessionId] = useState<string>("");
   const [files, setFiles] = useState<string[]>([]);
   const [totalChunks, setTotalChunks] = useState(0);
-  const [topK, setTopK] = useState(4);
-  const [minScore, setMinScore] = useState(0.20);
-
-  // Advanced RAG Controls State
-  const [useHybrid, setUseHybrid] = useState(true);
-  const [useRerank, setUseRerank] = useState(true);
-  const [useHyde, setUseHyde] = useState(false);
-  const [useCrag, setUseCrag] = useState(true);
-  const [useSelfRag, setUseSelfRag] = useState(true);
 
   const [history, setHistory] = useState<QueryResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,7 +54,6 @@ export default function Home() {
     }
     setSessionId(sid);
 
-    // Theme initialization: check localStorage or system preference
     const savedTheme = localStorage.getItem("docquery_theme") as "light" | "dark" | null;
     if (savedTheme) {
       setTheme(savedTheme);
@@ -152,21 +142,21 @@ export default function Home() {
         },
         body: JSON.stringify({
           query: queryText,
-          top_k: topK,
-          min_score: minScore,
+          top_k: 4,
+          min_score: 0.20,
           session_id: sessionId,
-          use_hybrid: useHybrid,
-          use_reranking: useRerank,
-          use_hyde: useHyde,
-          use_crag: useCrag,
-          use_self_rag: useSelfRag,
+          use_hybrid: true,
+          use_reranking: true,
+          use_hyde: false,
+          use_crag: true,
+          use_self_rag: true,
         }),
       });
 
       const data = await parseResponseSafe<QueryResponse>(res);
       setHistory((prev) => [data, ...prev]);
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : "Error executing query.";
+      const errorMsg = err instanceof Error ? err.message : "Error finding answer.";
       setHistory((prev) => [
         {
           query: queryText,
@@ -200,25 +190,11 @@ export default function Home() {
       {/* Main Split Layout */}
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 py-6">
         <div className="flex flex-col lg:flex-row gap-6 items-start">
-          {/* Left Document Management & Advanced RAG Controls Panel */}
+          {/* Left Document Management Panel */}
           <DocumentPanel
             sessionId={sessionId}
             files={files}
             totalChunks={totalChunks}
-            topK={topK}
-            setTopK={setTopK}
-            minScore={minScore}
-            setMinScore={setMinScore}
-            useHybrid={useHybrid}
-            setUseHybrid={setUseHybrid}
-            useRerank={useRerank}
-            setUseRerank={setUseRerank}
-            useHyde={useHyde}
-            setUseHyde={setUseHyde}
-            useCrag={useCrag}
-            setUseCrag={setUseCrag}
-            useSelfRag={useSelfRag}
-            setUseSelfRag={setUseSelfRag}
             onUploadSuccess={() => refreshStats(sessionId)}
           />
 
@@ -230,7 +206,7 @@ export default function Home() {
               isLoading={isLoading}
             />
 
-            {/* Conversation History / Results with RAG Inspector */}
+            {/* Conversation History / Results Thread */}
             <MessageThread
               history={history}
               isLoading={isLoading}

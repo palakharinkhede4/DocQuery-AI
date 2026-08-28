@@ -8,6 +8,7 @@ import {
   BookOpen,
   Sun,
   Moon,
+  Files,
 } from "lucide-react";
 
 interface HeaderProps {
@@ -50,33 +51,20 @@ export function Header({
               DocQuery
             </h1>
             <p className="text-xs text-stone-500 dark:text-stone-400">
-              Technical Document Intelligence
+              Document Assistant & Q&A
             </p>
           </div>
         </div>
 
         {/* Action Controls & Session Metadata */}
         <div className="flex items-center gap-2">
-          {/* Document Stats Pill */}
-          <div className="hidden sm:flex items-center gap-1.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/80 px-2.5 py-1.5 text-xs text-stone-600 dark:text-stone-300">
+          {/* Document Count Pill */}
+          <div className="hidden sm:flex items-center gap-1.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/80 px-3 py-1.5 text-xs text-stone-600 dark:text-stone-300">
+            <Files className="h-3.5 w-3.5 text-stone-400" />
             <span>
-              <strong className="font-semibold text-stone-900 dark:text-stone-100">{totalDocs}</strong> docs ({totalChunks} chunks)
+              <strong className="font-semibold text-stone-900 dark:text-stone-100">{totalDocs}</strong> document{totalDocs === 1 ? "" : "s"} loaded
             </span>
           </div>
-
-          {/* Session ID Pill */}
-          <button
-            onClick={handleCopySession}
-            title="Click to copy Session ID"
-            className="flex items-center gap-1.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/80 px-2.5 py-1.5 text-xs font-mono text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200 transition-colors"
-          >
-            <span>ID: {sessionId.slice(0, 8)}</span>
-            {copied ? (
-              <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-            ) : (
-              <Copy className="h-3.5 w-3.5" />
-            )}
-          </button>
 
           {/* Light / Dark Mode Toggle */}
           <button
@@ -91,15 +79,15 @@ export function Header({
             )}
           </button>
 
-          {/* Reset Session Button */}
+          {/* Clear / New Chat Button */}
           <button
             onClick={onResetSession}
             disabled={isResetting}
-            title="Clear all indexed documents and reset workspace"
+            title="Clear current documents and start fresh"
             className="flex items-center gap-1.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-400 hover:border-red-300 dark:hover:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-600 dark:hover:text-red-300 transition-colors disabled:opacity-50"
           >
             <RotateCcw className={`h-3.5 w-3.5 ${isResetting ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline">Reset</span>
+            <span className="hidden sm:inline">New Session</span>
           </button>
         </div>
       </div>

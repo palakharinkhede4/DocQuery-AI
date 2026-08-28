@@ -37,7 +37,7 @@ export function QueryConsole({
   }, [query]);
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2">
       {/* Main Query Input Box */}
       <form
         onSubmit={handleSubmit}
@@ -48,7 +48,7 @@ export function QueryConsole({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask a technical question about your indexed documents..."
+          placeholder="Ask any question about your documents..."
           rows={1}
           disabled={isLoading}
           className="max-h-32 w-full resize-none bg-transparent px-3 py-2 text-sm text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none disabled:opacity-50"
@@ -69,11 +69,10 @@ export function QueryConsole({
         </div>
       </form>
 
-      <div className="flex items-center justify-between px-1 text-[11px] text-stone-400 dark:text-stone-500 font-mono">
+      <div className="flex items-center justify-between px-1 text-[11px] text-stone-400 dark:text-stone-500">
         <span className="flex items-center gap-1">
-          <CornerDownLeft className="h-3 w-3" /> Press Enter to query, Shift+Enter for newline
+          <CornerDownLeft className="h-3 w-3" /> Press Enter to send, Shift+Enter for newline
         </span>
-        <span>Strict Context Grounding</span>
       </div>
     </div>
   );
