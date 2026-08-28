@@ -13,6 +13,11 @@ import {
   ChevronUp,
   FileCheck,
   Zap,
+  Sparkles,
+  Layers,
+  Crosshair,
+  ShieldAlert,
+  SearchCheck,
 } from "lucide-react";
 
 interface DocumentPanelProps {
@@ -23,6 +28,16 @@ interface DocumentPanelProps {
   setTopK: (val: number) => void;
   minScore: number;
   setMinScore: (val: number) => void;
+  useHybrid: boolean;
+  setUseHybrid: (val: boolean) => void;
+  useRerank: boolean;
+  setUseRerank: (val: boolean) => void;
+  useHyde: boolean;
+  setUseHyde: (val: boolean) => void;
+  useCrag: boolean;
+  setUseCrag: (val: boolean) => void;
+  useSelfRag: boolean;
+  setUseSelfRag: (val: boolean) => void;
   onUploadSuccess: () => void;
 }
 
@@ -34,6 +49,16 @@ export function DocumentPanel({
   setTopK,
   minScore,
   setMinScore,
+  useHybrid,
+  setUseHybrid,
+  useRerank,
+  setUseRerank,
+  useHyde,
+  setUseHyde,
+  useCrag,
+  setUseCrag,
+  useSelfRag,
+  setUseSelfRag,
   onUploadSuccess,
 }: DocumentPanelProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -41,7 +66,7 @@ export function DocumentPanel({
   const [isLoadingDemo, setIsLoadingDemo] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = async (selectedFiles: FileList | null) => {
@@ -204,6 +229,132 @@ export function DocumentPanel({
         </div>
       </div>
 
+      {/* Advanced RAG Architecture Controls */}
+      <div className="rounded-xl border border-stone-200 dark:border-stone-800/90 bg-white dark:bg-stone-900/60 p-4 shadow-sm backdrop-blur-sm transition-colors">
+        <button
+          type="button"
+          onClick={() => setShowSettings(!showSettings)}
+          className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100"
+        >
+          <div className="flex items-center gap-2">
+            <Sliders className="h-4 w-4 text-stone-700 dark:text-stone-300" />
+            <span>Advanced RAG Architecture</span>
+          </div>
+          {showSettings ? (
+            <ChevronUp className="h-4 w-4 text-stone-400" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-stone-400" />
+          )}
+        </button>
+
+        {showSettings && (
+          <div className="mt-3.5 space-y-3.5 text-xs text-stone-700 dark:text-stone-300 pt-3 border-t border-stone-200 dark:border-stone-800/80">
+            {/* Feature Toggles */}
+            <div className="space-y-2.5">
+              <label className="flex items-center justify-between cursor-pointer group">
+                <div className="flex items-center gap-2">
+                  <Layers className="h-3.5 w-3.5 text-blue-500" />
+                  <span className="text-stone-700 dark:text-stone-300 font-medium">Hybrid Search (BM25 + RRF)</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={useHybrid}
+                  onChange={(e) => setUseHybrid(e.target.checked)}
+                  className="rounded border-stone-300 text-stone-900 focus:ring-stone-500 dark:border-stone-700 dark:bg-stone-800"
+                />
+              </label>
+
+              <label className="flex items-center justify-between cursor-pointer group">
+                <div className="flex items-center gap-2">
+                  <Crosshair className="h-3.5 w-3.5 text-purple-500" />
+                  <span className="text-stone-700 dark:text-stone-300 font-medium">Cross-Encoder Reranking</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={useRerank}
+                  onChange={(e) => setUseRerank(e.target.checked)}
+                  className="rounded border-stone-300 text-stone-900 focus:ring-stone-500 dark:border-stone-700 dark:bg-stone-800"
+                />
+              </label>
+
+              <label className="flex items-center justify-between cursor-pointer group">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                  <span className="text-stone-700 dark:text-stone-300 font-medium">HyDE Query Expansion</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={useHyde}
+                  onChange={(e) => setUseHyde(e.target.checked)}
+                  className="rounded border-stone-300 text-stone-900 focus:ring-stone-500 dark:border-stone-700 dark:bg-stone-800"
+                />
+              </label>
+
+              <label className="flex items-center justify-between cursor-pointer group">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="h-3.5 w-3.5 text-emerald-500" />
+                  <span className="text-stone-700 dark:text-stone-300 font-medium">CRAG Document Grading</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={useCrag}
+                  onChange={(e) => setUseCrag(e.target.checked)}
+                  className="rounded border-stone-300 text-stone-900 focus:ring-stone-500 dark:border-stone-700 dark:bg-stone-800"
+                />
+              </label>
+
+              <label className="flex items-center justify-between cursor-pointer group">
+                <div className="flex items-center gap-2">
+                  <SearchCheck className="h-3.5 w-3.5 text-teal-500" />
+                  <span className="text-stone-700 dark:text-stone-300 font-medium">Self-RAG Grounding Check</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={useSelfRag}
+                  onChange={(e) => setUseSelfRag(e.target.checked)}
+                  className="rounded border-stone-300 text-stone-900 focus:ring-stone-500 dark:border-stone-700 dark:bg-stone-800"
+                />
+              </label>
+            </div>
+
+            {/* Sliders */}
+            <div className="pt-2 border-t border-stone-100 dark:border-stone-800/60 space-y-3">
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-stone-500 dark:text-stone-400">Top-K Passages:</span>
+                  <span className="font-mono text-stone-800 dark:text-stone-200">{topK}</span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="8"
+                  step="1"
+                  value={topK}
+                  onChange={(e) => setTopK(Number(e.target.value))}
+                  className="w-full h-1.5 bg-stone-200 dark:bg-stone-800 rounded-lg appearance-none cursor-pointer accent-stone-900 dark:accent-stone-100"
+                />
+              </div>
+
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-stone-500 dark:text-stone-400">Relevance Threshold:</span>
+                  <span className="font-mono text-stone-800 dark:text-stone-200">{(minScore * 100).toFixed(0)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.1"
+                  max="0.8"
+                  step="0.05"
+                  value={minScore}
+                  onChange={(e) => setMinScore(Number(e.target.value))}
+                  className="w-full h-1.5 bg-stone-200 dark:bg-stone-800 rounded-lg appearance-none cursor-pointer accent-stone-900 dark:accent-stone-100"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Active Indexed Documents List */}
       <div className="rounded-xl border border-stone-200 dark:border-stone-800/90 bg-white dark:bg-stone-900/60 p-4 shadow-sm backdrop-blur-sm transition-colors">
         <div className="flex items-center justify-between mb-2">
@@ -235,70 +386,6 @@ export function DocumentPanel({
                 </span>
               </div>
             ))}
-          </div>
-        )}
-      </div>
-
-      {/* Retrieval Engine Settings (Collapsible) */}
-      <div className="rounded-xl border border-stone-200 dark:border-stone-800/90 bg-white dark:bg-stone-900/60 p-4 shadow-sm backdrop-blur-sm transition-colors">
-        <button
-          type="button"
-          onClick={() => setShowSettings(!showSettings)}
-          className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100"
-        >
-          <div className="flex items-center gap-2">
-            <Sliders className="h-4 w-4 text-stone-700 dark:text-stone-300" />
-            <span>Retrieval Parameters</span>
-          </div>
-          {showSettings ? (
-            <ChevronUp className="h-4 w-4 text-stone-400" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-stone-400" />
-          )}
-        </button>
-
-        {showSettings && (
-          <div className="mt-3.5 space-y-4 text-xs text-stone-700 dark:text-stone-300 pt-3 border-t border-stone-200 dark:border-stone-800/80">
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-stone-500 dark:text-stone-400">Top-K Passages:</span>
-                <span className="font-mono text-stone-800 dark:text-stone-200">{topK}</span>
-              </div>
-              <input
-                type="range"
-                min="1"
-                max="8"
-                step="1"
-                value={topK}
-                onChange={(e) => setTopK(Number(e.target.value))}
-                className="w-full h-1.5 bg-stone-200 dark:bg-stone-800 rounded-lg appearance-none cursor-pointer accent-stone-900 dark:accent-stone-100"
-              />
-              <div className="flex justify-between text-[10px] text-stone-400 mt-1">
-                <span>Fast (1)</span>
-                <span>Balanced (4)</span>
-                <span>Deep (8)</span>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-stone-500 dark:text-stone-400">Relevance Threshold:</span>
-                <span className="font-mono text-stone-800 dark:text-stone-200">{(minScore * 100).toFixed(0)}%</span>
-              </div>
-              <input
-                type="range"
-                min="0.1"
-                max="0.8"
-                step="0.05"
-                value={minScore}
-                onChange={(e) => setMinScore(Number(e.target.value))}
-                className="w-full h-1.5 bg-stone-200 dark:bg-stone-800 rounded-lg appearance-none cursor-pointer accent-stone-900 dark:accent-stone-100"
-              />
-              <div className="flex justify-between text-[10px] text-stone-400 mt-1">
-                <span>Permissive (10%)</span>
-                <span>Strict (80%)</span>
-              </div>
-            </div>
           </div>
         )}
       </div>

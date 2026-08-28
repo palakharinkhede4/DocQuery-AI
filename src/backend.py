@@ -24,7 +24,13 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     query: str
     top_k: Optional[int] = 4
+    min_score: Optional[float] = 0.35
     session_id: Optional[str] = "default_session"
+    use_hybrid: Optional[bool] = True
+    use_reranking: Optional[bool] = True
+    use_hyde: Optional[bool] = False
+    use_crag: Optional[bool] = True
+    use_self_rag: Optional[bool] = True
 
 
 @app.get("/")
@@ -53,7 +59,17 @@ def health_check(session_id: Optional[str] = "default_session"):
 def ask_question(req: QueryRequest):
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query string cannot be empty.")
-    result = run_pipeline(req.query, top_k=req.top_k or 4, session_id=req.session_id)
+    result = run_pipeline(
+        query=req.query,
+        top_k=req.top_k or 4,
+        session_id=req.session_id,
+        min_score=req.min_score if req.min_score is not None else 0.35,
+        use_hybrid=req.use_hybrid if req.use_hybrid is not None else True,
+        use_reranking=req.use_reranking if req.use_reranking is not None else True,
+        use_hyde=req.use_hyde if req.use_hyde is not None else False,
+        use_crag=req.use_crag if req.use_crag is not None else True,
+        use_self_rag=req.use_self_rag if req.use_self_rag is not None else True
+    )
     return result
 
 

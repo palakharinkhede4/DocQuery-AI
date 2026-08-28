@@ -4,6 +4,7 @@ from src.parsers import parse_document
 from src.vectorstore import FAISSVectorStore, get_vector_store, clear_session_store
 from src.pipeline import run_pipeline
 from src.ingest import ingest_file_objects
+from src.advanced_rag import BM25Index, reciprocal_rank_fusion, CRAGGrader, SelfRAGVerifier
 
 
 class TestLocalRAGPipeline(unittest.TestCase):
@@ -19,8 +20,54 @@ class TestLocalRAGPipeline(unittest.TestCase):
         self.assertGreaterEqual(len(chunks), 1)
         self.assertIn("Gradient Descent", chunks[0]["text"])
 
+    def test_bm25_index_and_search(self):
+        docs = [
+            {"text": "Reciprocal Rank Fusion merges multiple ranking list scores.", "metadata": {"source": "rrf.txt"}},
+            {"text": "Convolutional Neural Networks excel at computer vision tasks.", "metadata": {"source": "cnn.txt"}},
+            {"text": "Cross-Encoder models compute joint attention across query and passage.", "metadata": {"source": "cross_encoder.txt"}}
+        ]
+        bm25 = BM25Index()
+        bm25.build_index(docs)
+
+        results = bm25.search("Cross-Encoder attention", top_k=2)
+        self.assertGreater(len(results), 0)
+        top_idx, top_score = results[0]
+        self.assertEqual(top_idx, 2)
+        self.assertIn("Cross-Encoder", docs[top_idx]["text"])
+
+    def test_reciprocal_rank_fusion(self):
+        docs = [
+            {"text": "Doc A: Exact keyword match and semantic match.", "metadata": {"source": "a.txt"}},
+            {"text": "Doc B: Semantic only match.", "metadata": {"source": "b.txt"}},
+            {"text": "Doc C: Unrelated document content.", "metadata": {"source": "c.txt"}}
+        ]
+        dense_ranks = [{"text": docs[1]["text"], "score": 0.9, "_doc_idx": 1}, {"text": docs[0]["text"], "score": 0.85, "_doc_idx": 0}]
+        sparse_ranks = [(0, 5.2), (2, 1.1)]
+
+        fused = reciprocal_rank_fusion(dense_ranks, sparse_ranks, docs, k=60, top_k=2)
+        self.assertGreater(len(fused), 0)
+        # Doc 0 is present in both rankings so its RRF score should rank it #1
+        self.assertEqual(fused[0]["text"], docs[0]["text"])
+
+    def test_crag_grading(self):
+        docs = [
+            {"text": "Polymorphism allows objects of different classes to respond to identical method calls.", "score": 0.8},
+            {"text": "DATABASE MANAGEMENT SYSTEMS: SQL transactions ensure ACID properties.", "score": 0.7}
+        ]
+        graded, stats = CRAGGrader.grade_documents("What is polymorphism in OOP?", docs)
+        self.assertGreater(len(graded), 0)
+        self.assertEqual(graded[0]["crag_grade"], "RELEVANT")
+        self.assertIn("Polymorphism", graded[0]["text"])
+
+    def test_self_rag_verification(self):
+        context = "A first flush diverter routes the initial contaminated roof runoff away from the main water tank."
+        answer = "A first flush diverter is used to route initial contaminated rainwater runoff away from storage tanks."
+        res = SelfRAGVerifier.verify_answer(answer, context, "What is a first flush diverter?")
+        self.assertTrue(res["is_grounded"])
+        self.assertGreaterEqual(res["grounding_score"], 0.5)
+
     def test_session_isolated_pipeline(self):
-        test_session = "test_session_123"
+        test_session = "test_session_adv_rag_123"
         sample_doc = {
             "name": "neural_net.txt",
             "content": b"Neural Networks consist of layers of interconnected nodes or neurons. "
@@ -37,6 +84,7 @@ class TestLocalRAGPipeline(unittest.TestCase):
         self.assertIn("query", pipeline_res)
         self.assertIn("answer", pipeline_res)
         self.assertGreater(len(pipeline_res["sources"]), 0)
+        self.assertIn("pipeline_trace", pipeline_res)
 
         # Clean up test session store
         clear_session_store(test_session)

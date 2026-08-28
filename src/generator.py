@@ -3,6 +3,7 @@ import re
 import sys
 import requests
 from config import LLM_MODEL, MAX_TOKENS
+from src.advanced_rag import SelfRAGVerifier
 
 
 def is_cloud_environment():
@@ -69,34 +70,35 @@ def get_api_key(key_name):
     return ""
 
 
+SYSTEM_INSTRUCTION = (
+    "You are a Principal Document Intelligence & Research AI assistant.\n"
+    "Your goal is to formulate a high-accuracy, rigorous, complete, and beautifully organized technical answer to the user's question based strictly on the provided Context Passages.\n\n"
+    "### Core Response Architecture:\n"
+    "1. EXECUTIVE SUMMARY: Start with a clear, direct, and comprehensive 1-2 sentence definition or answer.\n"
+    "2. DETAILED MECHANISM & PRINCIPLES: Provide a thorough, step-by-step technical explanation of the underlying mechanisms, processes, or theory found in the context.\n"
+    "3. KEY COMPONENTS & CHARACTERISTICS: Use cleanly formatted bullet points, numbered workflows, or code snippets (if present) to break down specific components, parameters, and properties.\n"
+    "4. IN-LINE SOURCE CITATIONS: Attribute key facts and specifications with in-line source tags, e.g. [Source: document.pdf (Page 2)].\n"
+    "5. STRICT TOPIC FOCUS & NEGATIVE CONSTRAINT: Strictly answer ONLY what was asked. Never add separate sections for unrelated syllabus topics or adjacent headers that happen to appear in the same chunk.\n"
+    "6. GROUNDING & HONESTY: Do NOT invent facts or extrapolate beyond what is documented. If the context does not contain enough information, state: 'Based on the provided documents, I could not find sufficient information to answer your question.'"
+)
+
+
 def generate_answer_gemini(context, query, api_key):
     """
-    Generate a thorough, complete, beautifully structured Markdown response using Gemini 3.5 Flash Lite API.
+    Generate a thorough, complete, beautifully structured Markdown response using Gemini API.
     """
     models_to_try = [
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
         "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
-        "gemini-2.5-flash-lite",
         "gemini-2.5-flash"
     ]
 
-    system_instruction = (
-        "You are an expert AI assistant.\n"
-        "Your task is to provide a thorough, complete, and clear answer to the user's specific question using ONLY the provided document context.\n\n"
-        "Formatting & Content Guidelines:\n"
-        "1. FOCUSED & THOROUGH EXPLANATION: Explain the concept in full, clear detail. Provide comprehensive explanations, key characteristics, and examples if present in the context.\n"
-        "2. STRICT TOPIC FOCUS: Focus strictly on the question asked. Do NOT create separate sections for unrelated adjacent topics found in the context (e.g., if asked 'what is polymorphism', explain polymorphism thoroughly, but do NOT add extra sections for Dynamic Binding, Abstraction, or Syllabus unless explicitly asked).\n"
-        "3. NO METADATA/HEADER REPETITION: Do NOT repeat raw page numbers, OCR artifact tags (like /H17040 or ■ 267), or raw document source headers.\n"
-        "4. STRUCTURE: Use clear, clean Markdown formatting with bold headers, bullet points, and code blocks for readability.\n"
-        "5. MISSING INFO: If the provided context does NOT contain enough information to answer the question, state ONLY: "
-        "'Based on the provided documents, I could not find sufficient information to answer your question.'"
-    )
-
-    prompt = f"Context:\n{context}\n\nQuestion: {query}"
+    prompt = f"Context Passages:\n{context}\n\nUser Question: {query}"
 
     payload = {
         "systemInstruction": {
-            "parts": [{"text": system_instruction}]
+            "parts": [{"text": SYSTEM_INSTRUCTION}]
         },
         "contents": [
             {
@@ -105,7 +107,7 @@ def generate_answer_gemini(context, query, api_key):
         ],
         "generationConfig": {
             "temperature": 0.2,
-            "maxOutputTokens": 800
+            "maxOutputTokens": 1000
         }
     }
 
@@ -115,7 +117,7 @@ def generate_answer_gemini(context, query, api_key):
     for model in models_to_try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         try:
-            res = requests.post(url, headers=headers, json=payload, timeout=15)
+            res = requests.post(url, headers=headers, json=payload, timeout=20)
             if res.status_code == 200:
                 data = res.json()
                 candidates = data.get("candidates", [])
@@ -124,21 +126,21 @@ def generate_answer_gemini(context, query, api_key):
                     if parts and "text" in parts[0]:
                         ans = parts[0]["text"].strip()
                         if ans:
-                            return ans
+                            return ans, model
             else:
                 # Fallback payload without separate systemInstruction object for older endpoints
                 fallback_payload = {
                     "contents": [
                         {
-                            "parts": [{"text": f"{system_instruction}\n\n{prompt}"}]
+                            "parts": [{"text": f"{SYSTEM_INSTRUCTION}\n\n{prompt}"}]
                         }
                     ],
                     "generationConfig": {
                         "temperature": 0.2,
-                        "maxOutputTokens": 800
+                        "maxOutputTokens": 1000
                     }
                 }
-                res_fb = requests.post(url, headers=headers, json=fallback_payload, timeout=15)
+                res_fb = requests.post(url, headers=headers, json=fallback_payload, timeout=20)
                 if res_fb.status_code == 200:
                     data = res_fb.json()
                     candidates = data.get("candidates", [])
@@ -147,7 +149,7 @@ def generate_answer_gemini(context, query, api_key):
                         if parts and "text" in parts[0]:
                             ans = parts[0]["text"].strip()
                             if ans:
-                                return ans
+                                return ans, model
                 last_error = f"HTTP {res.status_code}: {res.text}"
         except Exception as e:
             last_error = str(e)
@@ -163,17 +165,17 @@ def generate_answer_groq(context, query, api_key):
         messages=[
             {
                 "role": "system",
-                "content": "You are a concise AI assistant. Answer ONLY the specific question asked briefly and directly based ONLY on the context. Do not include unrelated topics."
+                "content": SYSTEM_INSTRUCTION
             },
             {
                 "role": "user",
-                "content": f"Context:\n{context}\n\nQuestion: {query}"
+                "content": f"Context Passages:\n{context}\n\nQuestion: {query}"
             }
         ],
-        max_tokens=400,
+        max_tokens=800,
         temperature=0.2
     )
-    return response.choices[0].message.content.strip()
+    return response.choices[0].message.content.strip(), "llama-3.1-8b-instant"
 
 
 def clean_text_glitches(text):
@@ -181,7 +183,6 @@ def clean_text_glitches(text):
     if not text:
         return ""
 
-    # Clean PDF structural header tags and page number glitches like '/H17040' or '■ 487'
     text = re.sub(r'/H\d+', '', text)
     text = re.sub(r'■\s*\d+', '', text)
     text = re.sub(r'P\.T\.O\s*\d*', '', text)
@@ -208,16 +209,12 @@ def clean_text_glitches(text):
     for glitch, fix in glitches.items():
         text = re.sub(re.escape(glitch), fix, text, flags=re.IGNORECASE)
 
-    # Clean up footnote superscript markers like 'source.a' -> 'source.'
     text = re.sub(r'([a-z0-9])\.([a-d1-9])\b', r'\1.', text)
     return text
 
 
 def prepare_context_units(context):
-    """
-    Normalizes context lines and reconstructs complete multi-line sentences & bullet points.
-    Prevents sentences from breaking mid-phrase.
-    """
+    """Normalizes context lines and reconstructs complete multi-line sentences & bullet points."""
     context_clean = clean_text_glitches(context)
     lines = [l.strip() for l in context_clean.split("\n") if l.strip() and not l.startswith("[Source:")]
 
@@ -260,15 +257,14 @@ def prepare_context_units(context):
 
 def synthesize_extractive_answer(context, query):
     """
-    Production-Grade RAG Context Synthesizer with topic isolation.
-    Parses definitions and bullet items into a concise structured response.
+    SOTA Structured Context Synthesizer with topic isolation and clean markdown formatting.
     """
     if not context or not context.strip():
-        return "No relevant information found in the document context."
+        return "No relevant information found in the document context.", "Extractive Fallback"
 
     units = prepare_context_units(context)
     if not units:
-        return "No relevant text extracted from context."
+        return "No relevant text extracted from context.", "Extractive Fallback"
 
     query_lower = query.lower()
     query_keywords = set(re.findall(r'\w+', query_lower)) - {
@@ -280,23 +276,22 @@ def synthesize_extractive_answer(context, query):
         score = 0
         u_lower = unit.lower()
 
-        # Penalize unrelated uppercase topic headers (e.g., "DYNAMIC BINDING:" when asking about polymorphism)
+        # Penalize unrelated uppercase topic headers
         header_match = re.match(r'^([A-Z\s]{3,25}):', unit.strip())
         if header_match:
             header_text = header_match.group(1).lower()
             if not any(kw in header_text for kw in query_keywords if len(kw) > 2):
                 score -= 30
 
-        # Word overlap score
         for kw in query_keywords:
             if len(kw) > 2 and kw in u_lower:
                 score += 8
 
-        if any(w in u_lower for w in ['means', 'defined as', 'refers to', 'ability to', 'process by which']):
-            score += 5
+        if any(w in u_lower for w in ['means', 'defined as', 'refers to', 'ability to', 'process by which', 'consists of', 'comprises']):
+            score += 6
 
         if unit.startswith(('•', '-', '*')) or ":" in unit[:30]:
-            score += 2
+            score += 3
 
         scored.append((score, unit))
 
@@ -304,19 +299,28 @@ def synthesize_extractive_answer(context, query):
     top_units = [unit for score, unit in scored if score > 3]
 
     if not top_units:
-        top_units = [unit for score, unit in scored[:2]]
+        top_units = [unit for score, unit in scored[:3]]
 
-    # Return top 2 relevant unbroken sentences for conciseness
     unique_answers = []
     seen_txt = set()
 
-    for item in top_units[:2]:
+    for item in top_units[:4]:
         clean_item = re.sub(r'^[•\-\*\d+\.]\s*', '', item).strip()
-        if clean_item[:30] not in seen_txt:
-            seen_txt.add(clean_item[:30])
+        key = clean_item[:35]
+        if key not in seen_txt:
+            seen_txt.add(key)
             unique_answers.append(clean_item)
 
-    return "\n\n".join(unique_answers)
+    if not unique_answers:
+        return "Based on the provided documents, I could not find sufficient information to answer your question.", "Extractive Fallback"
+
+    # Build structured response
+    output_parts = [f"**Executive Summary:**\n{unique_answers[0]}"]
+    if len(unique_answers) > 1:
+        bullets = "\n".join([f"- {ans}" for ans in unique_answers[1:]])
+        output_parts.append(f"**Key Points & Mechanisms:**\n{bullets}")
+
+    return "\n\n".join(output_parts), "Offline Structured Synthesizer"
 
 
 _local_tokenizer = None
@@ -327,7 +331,6 @@ def get_local_llm():
     global _local_tokenizer, _local_model
 
     if is_cloud_environment():
-        print("[Generator] RAM-constrained cloud environment detected (<4GB). Skipping heavy PyTorch CausalLM to prevent 1GB RAM OOM.")
         return None, None
 
     if _local_model is None:
@@ -337,7 +340,7 @@ def get_local_llm():
             _local_tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL)
             _local_model = AutoModelForCausalLM.from_pretrained(
                 LLM_MODEL,
-                torch_dtype=torch.float32
+                dtype=torch.float32
             )
             _local_model.to("cpu")
         except Exception as e:
@@ -346,61 +349,70 @@ def get_local_llm():
     return _local_tokenizer, _local_model
 
 
-def generate_answer(context, query):
+def generate_answer(context, query, enable_self_rag=True):
     """
-    Generate answer:
-    1. Check for Gemini API key (GEMINI_API_KEY / GOOGLE_API_KEY) if set in Secrets/Env.
-    2. Check for optional Groq API key if set in Secrets/Env.
-    3. Fallback to Local HuggingFace LLM (on local desktop with ample RAM).
-    4. Fallback to Production-Grade RAG Synthesizer (on Streamlit Cloud 1GB RAM container).
+    Generate answer with full model hierarchy, structured prompting, and Self-RAG verification.
     """
     if not context or not context.strip():
-        return "I don't know based on the provided documents. No relevant context was found."
+        return {
+            "answer": "I don't know based on the provided documents. No relevant context was found.",
+            "model_used": "None",
+            "self_rag": {"grounding_score": 0.0, "is_grounded": False, "verdict": "No Context"}
+        }
 
-    # 1. Primary High-Performance Model: Gemini API
+    raw_answer = ""
+    model_name = ""
+
+    # 1. Primary: Gemini API
     gemini_key = get_api_key("GEMINI_API_KEY")
     if gemini_key:
         try:
-            return generate_answer_gemini(context, query, gemini_key)
+            raw_answer, model_name = generate_answer_gemini(context, query, gemini_key)
         except Exception as e:
             print(f"Gemini API error ({e}). Falling back to secondary LLM pipelines.")
 
-    # 2. Secondary Model: Groq API
-    groq_key = get_api_key("GROQ_API_KEY")
-    if groq_key:
-        try:
-            return generate_answer_groq(context, query, groq_key)
-        except Exception as e:
-            print(f"Groq API error ({e}). Falling back to local/extractive pipeline.")
+    # 2. Secondary: Groq API
+    if not raw_answer:
+        groq_key = get_api_key("GROQ_API_KEY")
+        if groq_key:
+            try:
+                raw_answer, model_name = generate_answer_groq(context, query, groq_key)
+            except Exception as e:
+                print(f"Groq API error ({e}). Falling back to local/extractive pipeline.")
 
-    # Try local LLM (or extractive synthesis if cloud container)
-    tokenizer, model = get_local_llm()
+    # 3. Fallback: Local HuggingFace Model
+    if not raw_answer:
+        tokenizer, model = get_local_llm()
+        if tokenizer is not None and model is not None:
+            prompt = f"{SYSTEM_INSTRUCTION}\n\nContext Passages:\n{context}\n\nQuestion:\n{query}\n\nFinal Answer:\n"
+            try:
+                inputs = tokenizer(prompt, return_tensors="pt")
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=MAX_TOKENS,
+                    temperature=0.3,
+                    do_sample=True
+                )
+                decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                if "Final Answer:" in decoded:
+                    raw_answer = decoded.split("Final Answer:")[-1].strip()
+                else:
+                    raw_answer = decoded.strip()
+                model_name = f"Local ({LLM_MODEL})"
+            except Exception:
+                raw_answer = ""
 
-    if tokenizer is None or model is None:
-        return synthesize_extractive_answer(context, query)
+    # 4. Fallback: Offline Structured Synthesizer
+    if not raw_answer:
+        raw_answer, model_name = synthesize_extractive_answer(context, query)
 
-    prompt = f"""You are a technical assistant.
-Answer ONLY using the provided context. If missing, say: "I don't know based on the document."
+    # 5. Self-RAG Verification
+    self_rag_meta = {}
+    if enable_self_rag:
+        self_rag_meta = SelfRAGVerifier.verify_answer(raw_answer, context, query)
 
-Context:
-{context}
-
-Question:
-{query}
-
-Final Answer:
-"""
-    try:
-        inputs = tokenizer(prompt, return_tensors="pt")
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=MAX_TOKENS,
-            temperature=0.3,
-            do_sample=True
-        )
-        decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        if "Final Answer:" in decoded:
-            return decoded.split("Final Answer:")[-1].strip()
-        return decoded.strip()
-    except Exception as e:
-        return synthesize_extractive_answer(context, query)
+    return {
+        "answer": raw_answer,
+        "model_used": model_name,
+        "self_rag": self_rag_meta
+    }

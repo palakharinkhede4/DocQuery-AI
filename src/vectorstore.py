@@ -19,6 +19,9 @@ class BaseVectorStore:
         raise NotImplementedError
 
 
+from src.advanced_rag import BM25Index, reciprocal_rank_fusion
+
+
 class FAISSVectorStore(BaseVectorStore):
     def __init__(self, index_dir=VECTORSTORE_DIR):
         import faiss
@@ -28,6 +31,7 @@ class FAISSVectorStore(BaseVectorStore):
         self.pkl_file = os.path.join(index_dir, "chunks.pkl")
         self.index = None
         self.documents = []
+        self.bm25 = BM25Index()
         self._load()
 
     def _load(self):
@@ -36,10 +40,12 @@ class FAISSVectorStore(BaseVectorStore):
                 self.index = self.faiss.read_index(self.index_file)
                 with open(self.pkl_file, "rb") as f:
                     self.documents = pickle.load(f)
+                self.bm25.build_index(self.documents)
             except Exception as e:
                 print(f"Warning loading FAISS index: {e}")
                 self.index = None
                 self.documents = []
+                self.bm25 = BM25Index()
 
     def save(self):
         os.makedirs(self.index_dir, exist_ok=True)
@@ -60,6 +66,7 @@ class FAISSVectorStore(BaseVectorStore):
         self.index.add(embeddings)
 
         self.documents.extend(chunks_with_metadata)
+        self.bm25.build_index(self.documents)
         self.save()
 
     def search(self, query_embedding, top_k=4):
@@ -80,10 +87,37 @@ class FAISSVectorStore(BaseVectorStore):
                 results.append({
                     "text": doc.get("text") if isinstance(doc, dict) else str(doc),
                     "metadata": doc.get("metadata", {}) if isinstance(doc, dict) else {},
-                    "score": float(dist)
+                    "score": float(dist),
+                    "_doc_idx": idx
                 })
 
         return results
+
+    def search_bm25(self, query: str, top_k: int = 10):
+        """Search BM25 keyword index."""
+        if not self.documents:
+            return []
+        return self.bm25.search(query, top_k=top_k)
+
+    def hybrid_search(self, query: str, query_embedding, top_k: int = 4, rrf_k: int = 60):
+        """
+        Hybrid Search combining dense vector cosine similarity and sparse BM25 keyword matching via RRF.
+        """
+        if not self.documents:
+            return []
+
+        # Retrieve top dense and sparse candidate pools
+        dense_candidates = self.search(query_embedding, top_k=max(top_k * 3, 10))
+        sparse_candidates = self.search_bm25(query, top_k=max(top_k * 3, 10))
+
+        fused = reciprocal_rank_fusion(
+            dense_results=dense_candidates,
+            sparse_results=sparse_candidates,
+            all_documents=self.documents,
+            k=rrf_k,
+            top_k=top_k
+        )
+        return fused
 
     def get_documents(self):
         seen_files = set()
@@ -102,6 +136,7 @@ class FAISSVectorStore(BaseVectorStore):
     def clear(self):
         self.index = None
         self.documents = []
+        self.bm25 = BM25Index()
         if os.path.exists(self.index_dir):
             shutil.rmtree(self.index_dir, ignore_errors=True)
 

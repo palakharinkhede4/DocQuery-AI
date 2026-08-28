@@ -13,7 +13,7 @@ import requests
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
 st.set_page_config(
-    page_title="DocQuery AI — Document Intelligence & RAG",
+    page_title="DocQuery AI — Advanced Multi-Stage RAG",
     page_icon="📄",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -58,7 +58,7 @@ st.markdown("""
         color: #94A3B8;
         margin-bottom: 1.2rem;
     }
-    .badge-faiss {
+    .badge-rag {
         background-color: #1E3A8A;
         color: #93C5FD;
         padding: 3px 8px;
@@ -66,7 +66,7 @@ st.markdown("""
         font-size: 0.75rem;
         font-weight: 600;
     }
-    .badge-llm {
+    .badge-grounded {
         background-color: #064E3B;
         color: #6EE7B7;
         padding: 3px 8px;
@@ -114,26 +114,28 @@ with st.sidebar:
     st.markdown("""
     <div style="margin-bottom: 10px;">
         <h2 style="margin: 0; font-size: 1.5rem; font-weight: 800; color: #F8FAFC;">DocQuery AI</h2>
-        <span style="font-size: 0.8rem; color: #94A3B8;">Session-Isolated Document Intelligence</span>
+        <span style="font-size: 0.8rem; color: #94A3B8;">Advanced Multi-Stage RAG Architecture</span>
     </div>
     """, unsafe_allow_html=True)
     st.caption(f"Session ID: `{session_id}`")
     st.divider()
 
-    # System Status
-    st.markdown("**System Engine Status**")
-    if health_info:
-        st.markdown("Backend API: **Connected**", unsafe_allow_html=True)
-    else:
-        st.markdown("Backend API: **Direct Session Mode**", unsafe_allow_html=True)
+    # Advanced RAG Controls
+    st.markdown("**⚡ Advanced RAG Controls**")
+    use_hybrid = st.toggle("Hybrid Search (Dense + BM25 + RRF)", value=True, help="Combines sparse keyword search with dense vector embeddings using Reciprocal Rank Fusion.")
+    use_rerank = st.toggle("Cross-Encoder Reranking", value=True, help="Multi-pass joint cross-attention rescoring of candidate passages.")
+    use_hyde = st.toggle("HyDE Query Expansion", value=False, help="Generates a hypothetical technical answer to bridge semantic question-answer gaps.")
+    use_crag = st.toggle("CRAG Document Grading", value=True, help="Corrective RAG layer that evaluates chunk relevance and filters out irrelevant noise.")
+    use_self_rag = st.toggle("Self-RAG Grounding Verification", value=True, help="Calculates faithfulness and context support score on generated answer.")
 
-    st.markdown("Vector Store: <span class='badge-faiss'>FAISS Index</span>", unsafe_allow_html=True)
-    st.markdown("LLM Engine: <span class='badge-llm'>Gemini 3.5 Flash Lite</span>", unsafe_allow_html=True)
+    with st.expander("Retrieval Hyperparameters", expanded=False):
+        top_k = st.slider("Top-K Passages", min_value=1, max_value=8, value=4)
+        min_score = st.slider("Min Relevance Threshold", min_value=0.1, max_value=0.8, value=0.35, step=0.05)
 
     st.divider()
 
     # Session Documents Info
-    st.markdown("**Active Session Index**")
+    st.markdown("**Active Session Knowledge Base**")
     st.metric("Total Indexed Chunks", total_chunks)
 
     if files_list:
@@ -163,14 +165,14 @@ with st.sidebar:
 
 # Main Header
 st.markdown("<div class='brand-title'>DocQuery AI</div>", unsafe_allow_html=True)
-st.markdown("<div class='brand-subtitle'>Session-isolated document analysis & question answering powered by FAISS and Gemini 3.5 Flash Lite</div>", unsafe_allow_html=True)
+st.markdown("<div class='brand-subtitle'>Advanced Multi-Stage RAG Architecture (Hybrid BM25 + FAISS Dense + RRF + Cross-Encoder + CRAG + Self-RAG)</div>", unsafe_allow_html=True)
 
 # Main Hero / Document Workspace
 if total_chunks == 0:
     st.markdown("""
     <div class='hero-card'>
         <div class='hero-title'>Upload Documents to Begin</div>
-        <div class='hero-desc'>Upload your PDF, DOCX, TXT, or Markdown documents to parse, index, and query with AI instantly.</div>
+        <div class='hero-desc'>Upload your technical PDF, DOCX, TXT, or Markdown documents to parse, index, and query with state-of-the-art RAG architecture.</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -212,8 +214,8 @@ if total_chunks == 0:
 
     with col2:
         with st.popover("Just testing the app?"):
-            st.caption("Load 12 sample documents to test DocQuery AI instantly.")
-            if st.button("Load 12 Sample Demo Docs", use_container_width=True):
+            st.caption("Load 14 sample documents to test DocQuery AI instantly.")
+            if st.button("Load Sample Demo Docs", use_container_width=True):
                 progress_bar = st.progress(0, text="Loading demo documents...")
 
                 def update_demo_progress(pct, msg):
@@ -236,7 +238,7 @@ if total_chunks == 0:
 
 else:
     # Workspace when documents ARE loaded
-    st.markdown(f"**Active Workspace**: {len(files_list)} file(s) indexed ({total_chunks} vector chunks)")
+    st.markdown(f"**Active Knowledge Base**: {len(files_list)} file(s) indexed ({total_chunks} vector & BM25 chunks)")
 
     with st.expander("Add More Documents"):
         more_files = st.file_uploader(
@@ -270,43 +272,91 @@ else:
         st.session_state.chat_history = []
 
     with st.form(key="qa_form", clear_on_submit=True):
-        user_query = st.text_input("Ask any question about your documents:", placeholder="e.g. What are the key concepts explained in this document?")
+        user_query = st.text_input("Ask a technical question about your indexed documents:", placeholder="e.g. What are the key components and mechanisms described in the document?")
         submit_button = st.form_submit_button("Submit Question", type="primary", use_container_width=True)
 
     if submit_button and user_query.strip():
-        with st.spinner("Analyzing document index & generating answer..."):
+        with st.spinner("Running Multi-Stage RAG Pipeline (Hybrid Retrieval -> Rerank -> CRAG Grade -> Synthesis)..."):
             try:
+                payload = {
+                    "query": user_query,
+                    "top_k": top_k,
+                    "min_score": min_score,
+                    "session_id": session_id,
+                    "use_hybrid": use_hybrid,
+                    "use_reranking": use_rerank,
+                    "use_hyde": use_hyde,
+                    "use_crag": use_crag,
+                    "use_self_rag": use_self_rag
+                }
+
                 if health_info:
-                    res = requests.post(f"{API_URL}/ask", json={"query": user_query, "top_k": 4, "session_id": session_id})
+                    res = requests.post(f"{API_URL}/ask", json=payload)
                     response_data = res.json()
                 else:
                     from src.pipeline import run_pipeline
-                    response_data = run_pipeline(user_query, top_k=4, session_id=session_id)
+                    response_data = run_pipeline(
+                        query=user_query,
+                        top_k=top_k,
+                        session_id=session_id,
+                        min_score=min_score,
+                        use_hybrid=use_hybrid,
+                        use_reranking=use_rerank,
+                        use_hyde=use_hyde,
+                        use_crag=use_crag,
+                        use_self_rag=use_self_rag
+                    )
 
                 answer = response_data.get("answer", "No response generated.")
                 sources = response_data.get("sources", [])
+                trace = response_data.get("pipeline_trace", {})
+                self_rag_info = response_data.get("self_rag", {})
 
                 st.session_state.chat_history.insert(0, {
                     "question": user_query,
                     "answer": answer,
-                    "sources": sources
+                    "sources": sources,
+                    "trace": trace,
+                    "self_rag": self_rag_info
                 })
             except Exception as e:
                 st.error(f"Error executing query: {e}")
 
     # Conversation History Display
     if st.session_state.chat_history:
-        st.markdown("### Conversation History")
+        st.markdown("### Query Results")
         for idx, item in enumerate(st.session_state.chat_history):
             q_num = len(st.session_state.chat_history) - idx
             with st.container():
                 st.markdown(f"#### Question #{q_num}: {item['question']}")
+
+                # Self-RAG Grounding Badge
+                self_rag = item.get("self_rag", {})
+                if self_rag.get("verdict"):
+                    score_pct = int(self_rag.get("grounding_score", 0.0) * 100)
+                    st.markdown(f"<span class='badge-grounded'>Self-RAG Grounding: {self_rag.get('verdict')} ({score_pct}%)</span>", unsafe_allow_html=True)
+
                 st.markdown(item["answer"])
 
+                # RAG Pipeline Inspector
+                trace = item.get("trace", {})
+                if trace:
+                    with st.expander("🔍 RAG Execution Pipeline Inspector", expanded=False):
+                        if trace.get("hyde_expanded"):
+                            st.caption(f"🔮 **HyDE Expanded Query:** {trace.get('hyde_query')}")
+                        st.caption(f"⚙️ **Pipeline Steps Executed:**")
+                        for s in trace.get("steps", []):
+                            st.caption(f"• {s}")
+                        crag = trace.get("crag_stats", {})
+                        if crag:
+                            st.caption(f"🛡️ **CRAG Confidence:** {int(crag.get('retrieval_confidence', 0)*100)}% | Relevant: {crag.get('relevant_count')} | Noise Filtered: {crag.get('filtered_count')}")
+
+                # Source Citations
                 if item.get("sources"):
-                    with st.expander("View Source Citations & References"):
+                    with st.expander("📚 View Source Citations & References"):
                         for src in item["sources"]:
-                            st.markdown(f"**Document**: `{src['source']}` (Page {src['page']}) | *Similarity: {src['score']}*")
+                            grade_badge = f"[{src.get('crag_grade', 'RELEVANT')}]"
+                            st.markdown(f"**Document**: `{src['source']}` (Page {src['page']}) | *Score: {src['score']}* | {grade_badge}")
                             st.caption(f"\"{src['full_text']}\"")
                             st.divider()
 
@@ -314,25 +364,26 @@ else:
 
 st.divider()
 
-# System Architecture & Technical Specifications (Out of the way at bottom)
-with st.expander("System Architecture & Privacy Specifications"):
+# System Architecture & Technical Specifications
+with st.expander("Advanced RAG Architecture & Technical Specifications"):
     st.markdown("""
-    ### DocQuery AI Technical Specifications
+    ### Advanced Multi-Stage RAG Flow
 
     ```
-    ┌────────────────┐       ┌─────────────────┐       ┌────────────────────────┐
-    │ User Document  │ ────> │ Parser & Chunker│ ────> │ BGE Embedding Model    │
-    │ (PDF/DOCX/TXT) │       │ (Page Metadata) │       │ (Local Vector Embeds)  │
-    └────────────────┘       └─────────────────┘       └────────────────────────┘
-                                                                    │
-                                                                    ▼
-    ┌────────────────┐       ┌─────────────────┐       ┌────────────────────────┐
-    │ Streamlit UI / │ <──── │ Gemini 3.5 Flash│ <──── │ Isolated Session FAISS │
-    │ FastAPI Backend│       │ (Lite Engine)   │       │ (vectorstore/session)  │
-    └────────────────┘       └─────────────────┘       └────────────────────────┘
+    ┌─────────────────────────┐       ┌─────────────────────────┐       ┌─────────────────────────┐
+    │ User Technical Query    │ ────> │ 1. HyDE Query Expansion │ ────> │ 2. Sparse BM25 + FAISS  │
+    └─────────────────────────┘       └─────────────────────────┘       └────────────┬────────────┘
+                                                                                     │
+                                                                                     ▼
+    ┌─────────────────────────┐       ┌─────────────────────────┐       ┌─────────────────────────┐
+    │ 5. Self-RAG Grounding   │ <──── │ 4. Structured Synthesis │ <──── │ 3. RRF + Cross-Encoder  │
+    │    & Output Citations   │       │    (Executive + Detail) │       │    + CRAG Noise Filter  │
+    └─────────────────────────┘       └─────────────────────────┘       └─────────────────────────┘
     ```
 
-    - **Session Isolation**: Every browser tab receives a unique `Session ID`. Documents and vector indices in one session are isolated from other sessions.
-    - **Automatic Cleanup**: Session reset deletes temporary vector stores from memory and disk.
-    - **Multi-Format Parsing**: Automatic fallback stream text extraction handles damaged or complex PDF objects gracefully.
+    - **Sparse BM25 + Dense FAISS (Hybrid Retrieval)**: Eliminates vector-only blind spots for technical terminology, proper nouns, and code IDs.
+    - **Reciprocal Rank Fusion (RRF)**: Merges discrete rank orderings with mathematical normalization ($k=60$).
+    - **Cross-Encoder Reranking**: Full cross-attention query-document scoring for maximum precision.
+    - **Corrective RAG (CRAG)**: Filters out unrelated headers and irrelevant syllabus content before sending context to the generator.
+    - **Self-RAG Grounding**: Verifies factual alignment and anti-hallucination compliance.
     """)

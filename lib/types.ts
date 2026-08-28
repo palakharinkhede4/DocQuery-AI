@@ -20,6 +20,47 @@ export interface SourceCitation {
   snippet: string;
   fullText: string;
   score: number;
+  denseRank?: number;
+  sparseRank?: number;
+  rrfScore?: number;
+  rerankScore?: number;
+  cragGrade?: "RELEVANT" | "PARTIALLY_RELEVANT" | "IRRELEVANT";
+  cragScore?: number;
+  matchedKeywords?: string[];
+}
+
+export interface CRAGStats {
+  totalRetrieved: number;
+  relevantCount: number;
+  filteredCount: number;
+  retrievalConfidence: number;
+}
+
+export interface SelfRAGResult {
+  groundingScore: number;
+  isGrounded: boolean;
+  verdict: string;
+  supportedTermsCount?: number;
+}
+
+export interface PipelineTrace {
+  originalQuery: string;
+  hydeExpanded: boolean;
+  hydeQuery?: string | null;
+  hybridEnabled: boolean;
+  rerankingEnabled: boolean;
+  cragEnabled: boolean;
+  steps: string[];
+  cragStats?: CRAGStats;
+  selfRag?: SelfRAGResult;
+}
+
+export interface AdvancedRAGConfig {
+  useHybrid: boolean;
+  useReranking: boolean;
+  useHyde: boolean;
+  useCrag: boolean;
+  useSelfRag: boolean;
 }
 
 export interface QueryResponse {
@@ -29,6 +70,8 @@ export interface QueryResponse {
   modelUsed: string;
   latencyMs: number;
   session_id: string;
+  pipelineTrace?: PipelineTrace;
+  selfRag?: SelfRAGResult;
 }
 
 export interface IngestResponse {

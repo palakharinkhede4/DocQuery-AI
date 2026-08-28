@@ -16,7 +16,15 @@ export default function Home() {
   const [files, setFiles] = useState<string[]>([]);
   const [totalChunks, setTotalChunks] = useState(0);
   const [topK, setTopK] = useState(4);
-  const [minScore, setMinScore] = useState(0.25);
+  const [minScore, setMinScore] = useState(0.20);
+
+  // Advanced RAG Controls State
+  const [useHybrid, setUseHybrid] = useState(true);
+  const [useRerank, setUseRerank] = useState(true);
+  const [useHyde, setUseHyde] = useState(false);
+  const [useCrag, setUseCrag] = useState(true);
+  const [useSelfRag, setUseSelfRag] = useState(true);
+
   const [history, setHistory] = useState<QueryResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -124,6 +132,11 @@ export default function Home() {
           top_k: topK,
           min_score: minScore,
           session_id: sessionId,
+          use_hybrid: useHybrid,
+          use_reranking: useRerank,
+          use_hyde: useHyde,
+          use_crag: useCrag,
+          use_self_rag: useSelfRag,
         }),
       });
 
@@ -168,7 +181,7 @@ export default function Home() {
       {/* Main Split Layout */}
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 py-6">
         <div className="flex flex-col lg:flex-row gap-6 items-start">
-          {/* Left Document Management Panel */}
+          {/* Left Document Management & Advanced RAG Controls Panel */}
           <DocumentPanel
             sessionId={sessionId}
             files={files}
@@ -177,6 +190,16 @@ export default function Home() {
             setTopK={setTopK}
             minScore={minScore}
             setMinScore={setMinScore}
+            useHybrid={useHybrid}
+            setUseHybrid={setUseHybrid}
+            useRerank={useRerank}
+            setUseRerank={setUseRerank}
+            useHyde={useHyde}
+            setUseHyde={setUseHyde}
+            useCrag={useCrag}
+            setUseCrag={setUseCrag}
+            useSelfRag={useSelfRag}
+            setUseSelfRag={setUseSelfRag}
             onUploadSuccess={() => refreshStats(sessionId)}
           />
 
@@ -188,7 +211,7 @@ export default function Home() {
               isLoading={isLoading}
             />
 
-            {/* Conversation History / Results */}
+            {/* Conversation History / Results with RAG Inspector */}
             <MessageThread
               history={history}
               isLoading={isLoading}

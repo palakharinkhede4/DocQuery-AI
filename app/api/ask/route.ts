@@ -10,7 +10,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { query, top_k = 4, min_score = 0.25, session_id = "default_session" } = body;
+    const {
+      query,
+      top_k = 4,
+      min_score = 0.20,
+      session_id = "default_session",
+      use_hybrid = true,
+      use_reranking = true,
+      use_hyde = false,
+      use_crag = true,
+      use_self_rag = true,
+    } = body;
+
     const customApiKey = req.headers.get("x-gemini-api-key") || undefined;
 
     if (!query || !query.trim()) {
@@ -20,17 +31,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Vector Search
-    const sources = await VectorStoreManager.search(
+    // 1. Multi-Stage Advanced Retrieval
+    const { sources, trace } = await VectorStoreManager.searchAdvanced(
       session_id,
       query,
       Number(top_k),
       Number(min_score),
-      customApiKey
+      customApiKey,
+      use_hybrid,
+      use_reranking,
+      use_hyde,
+      use_crag
     );
 
-    // 2. Answer Generation
-    const { answer, modelUsed } = await generateAnswer(query, sources, customApiKey);
+    // 2. Structured Answer Generation with Self-RAG verification
+    const { answer, modelUsed, selfRag } = await generateAnswer(
+      query,
+      sources,
+      customApiKey,
+      use_self_rag
+    );
+
+    if (selfRag) {
+      trace.selfRag = selfRag;
+    }
 
     const latencyMs = Date.now() - startTime;
 
@@ -41,6 +65,8 @@ export async function POST(req: NextRequest) {
       modelUsed,
       latencyMs,
       session_id,
+      pipelineTrace: trace,
+      selfRag,
     };
 
     return NextResponse.json(responseData);

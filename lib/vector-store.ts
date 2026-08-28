@@ -1,4 +1,4 @@
-import { DocumentChunk, SourceCitation, SessionStats } from "./types";
+import { DocumentChunk, SourceCitation, SessionStats, PipelineTrace, CRAGStats } from "./types";
 import { DEMO_DOCUMENTS } from "./demo-data";
 import { chunkText } from "./parsers";
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -139,6 +139,135 @@ export async function generateGeminiEmbedding(text: string, apiKey: string): Pro
   }
 }
 
+/**
+ * Hypothetical Document Embeddings (HyDE)
+ */
+export async function generateHydePassage(query: string, apiKey?: string): Promise<string> {
+  if (!query || !query.trim()) return query;
+
+  if (apiKey) {
+    try {
+      const ai = new GoogleGenerativeAI(apiKey);
+      const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const prompt = `Write a concise 2-sentence technical paragraph answering the question: "${query}". Include essential terminology and mechanisms.`;
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 120 },
+      });
+      const text = result.response.text();
+      if (text && text.trim()) {
+        return `${query} ${text.trim()}`;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  const tokens = tokenize(query).filter((w) => !STOPWORDS.has(w));
+  return `${query} technical specifications and mechanisms for ${tokens.join(" ")}`;
+}
+
+/**
+ * Cross-Attention Scorer & Reranker
+ */
+function rerankPassages(
+  query: string,
+  passages: { chunk: DocumentChunk; score: number; denseRank?: number; sparseRank?: number; rrfScore?: number }[],
+  topK = 4
+) {
+  const queryTokens = new Set(tokenize(query).filter((t) => !STOPWORDS.has(t)));
+
+  for (const item of passages) {
+    const textLower = item.chunk.text.toLowerCase();
+    let crossScore = 0;
+
+    for (const t of queryTokens) {
+      if (textLower.includes(t)) {
+        crossScore += 2.0;
+      }
+    }
+
+    // Exact phrase match bonus
+    const phrase = Array.from(queryTokens).join(" ");
+    if (phrase.length > 3 && textLower.includes(phrase)) {
+      crossScore += 4.0;
+    }
+
+    const baseNormalized = item.score || 0.5;
+    const rerankProb = Math.min(Math.max((0.5 * baseNormalized) + (0.5 * (crossScore / (crossScore + 6))), 0.05), 0.99);
+    item.score = Math.round(rerankProb * 1000) / 1000;
+  }
+
+  passages.sort((a, b) => b.score - a.score);
+  return passages.slice(0, topK);
+}
+
+/**
+ * Corrective RAG (CRAG) Document Relevance Grader
+ */
+function gradeDocumentsCRAG(
+  query: string,
+  passages: { chunk: DocumentChunk; score: number; denseRank?: number; sparseRank?: number; rrfScore?: number }[],
+  minScore = 0.20
+): {
+  filtered: { chunk: DocumentChunk; score: number; cragGrade: "RELEVANT" | "PARTIALLY_RELEVANT" | "IRRELEVANT"; cragScore: number; matchedKeywords: string[] }[];
+  stats: CRAGStats;
+} {
+  const queryTokens = new Set(tokenize(query).filter((w) => !STOPWORDS.has(w)));
+  const results = [];
+  let relevantCount = 0;
+  let totalScore = 0;
+
+  for (const item of passages) {
+    const text = item.chunk.text.toLowerCase();
+    const matched = Array.from(queryTokens).filter((t) => text.includes(t));
+    const coverage = matched.length / Math.max(queryTokens.size, 1);
+
+    // Negative penalty for mismatched uppercase section headers
+    let penalty = 0;
+    const headerMatch = item.chunk.text.trim().match(/^([A-Z\s]{3,25}):/);
+    if (headerMatch) {
+      const header = headerMatch[1].toLowerCase();
+      if (!Array.from(queryTokens).some((k) => header.includes(k))) {
+        penalty = 0.2;
+      }
+    }
+
+    const finalGradeScore = Math.max(0, (0.5 * item.score) + (0.5 * coverage) - penalty);
+    totalScore += finalGradeScore;
+
+    let grade: "RELEVANT" | "PARTIALLY_RELEVANT" | "IRRELEVANT" = "IRRELEVANT";
+    if (finalGradeScore >= 0.40) {
+      grade = "RELEVANT";
+      relevantCount++;
+    } else if (finalGradeScore >= minScore) {
+      grade = "PARTIALLY_RELEVANT";
+      relevantCount++;
+    }
+
+    results.push({
+      chunk: item.chunk,
+      score: item.score,
+      cragGrade: grade,
+      cragScore: Math.round(finalGradeScore * 100) / 100,
+      matchedKeywords: matched,
+    });
+  }
+
+  const valid = results.filter((r) => r.cragGrade !== "IRRELEVANT");
+  const finalFiltered = valid.length > 0 ? valid : [results[0]];
+
+  return {
+    filtered: finalFiltered,
+    stats: {
+      totalRetrieved: passages.length,
+      relevantCount,
+      filteredCount: passages.length - valid.length,
+      retrievalConfidence: Math.round((totalScore / Math.max(passages.length, 1)) * 100) / 100,
+    },
+  };
+}
+
 export class VectorStoreManager {
   static async addChunks(
     sessionId: string,
@@ -165,73 +294,206 @@ export class VectorStoreManager {
     return store.chunks.length;
   }
 
-  static async search(
+  static async searchAdvanced(
     sessionId: string,
     query: string,
     topK = 4,
-    minScore = 0.15,
-    apiKey?: string
-  ): Promise<SourceCitation[]> {
+    minScore = 0.20,
+    apiKey?: string,
+    useHybrid = true,
+    useReranking = true,
+    useHyde = false,
+    useCrag = true
+  ): Promise<{ sources: SourceCitation[]; trace: PipelineTrace }> {
     const store = getOrCreateStore(sessionId);
-    if (store.chunks.length === 0) return [];
+    const trace: PipelineTrace = {
+      originalQuery: query,
+      hydeExpanded: false,
+      hydeQuery: null,
+      hybridEnabled: useHybrid,
+      rerankingEnabled: useReranking,
+      cragEnabled: useCrag,
+      steps: [],
+    };
+
+    if (store.chunks.length === 0 || !query.trim()) {
+      return { sources: [], trace };
+    }
 
     const queryClean = query.trim();
-    if (!queryClean) return [];
+    let searchQuery = queryClean;
 
+    // 1. HyDE Query Expansion
+    if (useHyde) {
+      const hydePassage = await generateHydePassage(queryClean, apiKey);
+      if (hydePassage && hydePassage !== queryClean) {
+        searchQuery = hydePassage;
+        trace.hydeExpanded = true;
+        trace.hydeQuery = hydePassage;
+        trace.steps.push("HyDE: Formulated hypothetical domain answer for semantic indexing.");
+      }
+    }
+
+    // 2. Query Embedding
+    let queryEmb: number[] | null = null;
+    if (apiKey) {
+      queryEmb = await generateGeminiEmbedding(searchQuery, apiKey);
+    }
+
+    // 3. BM25 Setup
     const allTokens = tokenize(queryClean);
     const queryKeywords = allTokens.filter((w) => !STOPWORDS.has(w));
     const effectiveKeywords = queryKeywords.length > 0 ? queryKeywords : allTokens;
 
-    let queryEmb: number[] | null = null;
-    if (apiKey) {
-      queryEmb = await generateGeminiEmbedding(queryClean, apiKey);
-    }
-
-    // Compute Document Frequencies (DF) for BM25
     const totalDocs = store.chunks.length;
     const docFreqs: Record<string, number> = {};
     let totalLen = 0;
 
     for (const chunk of store.chunks) {
       const tf = chunk.termFrequencies || {};
-      const wordsInChunk = Object.keys(tf);
       totalLen += Object.values(tf).reduce((acc, v) => acc + v, 0);
-
-      for (const word of wordsInChunk) {
+      for (const word of Object.keys(tf)) {
         docFreqs[word] = (docFreqs[word] || 0) + 1;
       }
     }
     const avgDocLen = totalLen / Math.max(totalDocs, 1);
 
-    const scoredChunks: { chunk: DocumentChunk; score: number }[] = [];
-
-    for (const chunk of store.chunks) {
-      let score = 0;
-
-      if (queryEmb && chunk.embedding) {
-        score = cosineSimilarity(queryEmb, chunk.embedding);
-      } else {
-        const bm25 = computeBM25Score(effectiveKeywords, chunk, docFreqs, totalDocs, avgDocLen);
-        // Normalize BM25 score to 0..1 range approx
-        score = bm25 > 0 ? Math.min(bm25 / (bm25 + 5), 1.0) : 0;
+    // Compute Dense Ranks
+    const denseRanked: { chunk: DocumentChunk; score: number }[] = [];
+    if (queryEmb) {
+      for (const chunk of store.chunks) {
+        if (chunk.embedding) {
+          const sim = cosineSimilarity(queryEmb, chunk.embedding);
+          denseRanked.push({ chunk, score: sim });
+        }
       }
-
-      scoredChunks.push({ chunk, score });
+      denseRanked.sort((a, b) => b.score - a.score);
     }
 
-    // Sort descending by score
-    scoredChunks.sort((a, b) => b.score - a.score);
+    // Compute Sparse BM25 Ranks
+    const sparseRanked: { chunk: DocumentChunk; score: number }[] = [];
+    for (const chunk of store.chunks) {
+      const bm25 = computeBM25Score(effectiveKeywords, chunk, docFreqs, totalDocs, avgDocLen);
+      sparseRanked.push({ chunk, score: bm25 });
+    }
+    sparseRanked.sort((a, b) => b.score - a.score);
 
-    const filtered = scoredChunks.filter((item) => item.score >= minScore);
-    const finalResults = filtered.length > 0 ? filtered.slice(0, topK) : scoredChunks.slice(0, 1);
+    // 4. Hybrid Reciprocal Rank Fusion (RRF)
+    const initialPool = Math.max(topK * 3, 10);
+    let candidateList: { chunk: DocumentChunk; score: number; denseRank?: number; sparseRank?: number; rrfScore?: number }[] = [];
 
-    return finalResults.map((item) => ({
-      source: item.chunk.source,
-      page: item.chunk.page,
-      snippet: item.chunk.text.slice(0, 160) + "...",
-      fullText: item.chunk.text,
-      score: Math.round(item.score * 1000) / 1000,
-    }));
+    if (useHybrid && queryEmb && denseRanked.length > 0) {
+      const rrfScores = new Map<string, { chunk: DocumentChunk; rrf: number; denseRank: number; sparseRank: number }>();
+      const k = 60;
+
+      denseRanked.slice(0, initialPool).forEach((item, r) => {
+        const id = item.chunk.id;
+        rrfScores.set(id, {
+          chunk: item.chunk,
+          rrf: (1 / (k + r + 1)),
+          denseRank: r + 1,
+          sparseRank: 999,
+        });
+      });
+
+      sparseRanked.slice(0, initialPool).forEach((item, r) => {
+        const id = item.chunk.id;
+        if (rrfScores.has(id)) {
+          const entry = rrfScores.get(id)!;
+          entry.rrf += (1 / (k + r + 1));
+          entry.sparseRank = r + 1;
+        } else {
+          rrfScores.set(id, {
+            chunk: item.chunk,
+            rrf: (1 / (k + r + 1)),
+            denseRank: 999,
+            sparseRank: r + 1,
+          });
+        }
+      });
+
+      candidateList = Array.from(rrfScores.values()).map((v) => ({
+        chunk: v.chunk,
+        score: Math.min(v.rrf * 30, 1.0),
+        denseRank: v.denseRank,
+        sparseRank: v.sparseRank,
+        rrfScore: Math.round(v.rrf * 10000) / 10000,
+      }));
+
+      candidateList.sort((a, b) => (b.rrfScore || 0) - (a.rrfScore || 0));
+      trace.steps.push("Hybrid Retrieval: Combined Dense Vector + BM25 rankings via Reciprocal Rank Fusion (k=60).");
+    } else {
+      const sourceList = denseRanked.length > 0 ? denseRanked : sparseRanked;
+      candidateList = sourceList.slice(0, initialPool).map((item, idx) => ({
+        chunk: item.chunk,
+        score: item.score > 0 ? Math.min(item.score / (item.score + 5), 1.0) : 0,
+        denseRank: idx + 1,
+        sparseRank: idx + 1,
+        rrfScore: Math.round(item.score * 100) / 100,
+      }));
+      trace.steps.push("Lexical/Dense Retrieval: Standard rank scoring applied.");
+    }
+
+    // 5. Cross-Encoder / Cross-Scoring Reranker
+    if (useReranking && candidateList.length > 0) {
+      candidateList = rerankPassages(queryClean, candidateList, initialPool);
+      trace.steps.push("Cross-Encoder Reranking: Multi-pass relevance attention rescoring applied.");
+    }
+
+    // 6. CRAG Document Relevance Grading
+    let finalSources: SourceCitation[] = [];
+    if (useCrag && candidateList.length > 0) {
+      const cragResult = gradeDocumentsCRAG(queryClean, candidateList, minScore);
+      trace.cragStats = cragResult.stats;
+      trace.steps.push(`CRAG Grading: ${cragResult.stats.relevantCount} relevant passages verified, ${cragResult.stats.filteredCount} noise chunks filtered.`);
+
+      finalSources = cragResult.filtered.slice(0, topK).map((item) => ({
+        source: item.chunk.source,
+        page: item.chunk.page,
+        snippet: item.chunk.text.slice(0, 160) + "...",
+        fullText: item.chunk.text,
+        score: Math.round(item.score * 1000) / 1000,
+        cragGrade: item.cragGrade,
+        cragScore: item.cragScore,
+        matchedKeywords: item.matchedKeywords,
+      }));
+    } else {
+      const filtered = candidateList.filter((item) => item.score >= minScore);
+      const results = filtered.length > 0 ? filtered.slice(0, topK) : candidateList.slice(0, 1);
+      finalSources = results.map((item) => ({
+        source: item.chunk.source,
+        page: item.chunk.page,
+        snippet: item.chunk.text.slice(0, 160) + "...",
+        fullText: item.chunk.text,
+        score: Math.round(item.score * 1000) / 1000,
+        denseRank: item.denseRank,
+        sparseRank: item.sparseRank,
+        rrfScore: item.rrfScore,
+      }));
+    }
+
+    return { sources: finalSources, trace };
+  }
+
+  static async search(
+    sessionId: string,
+    query: string,
+    topK = 4,
+    minScore = 0.20,
+    apiKey?: string
+  ): Promise<SourceCitation[]> {
+    const { sources } = await this.searchAdvanced(
+      sessionId,
+      query,
+      topK,
+      minScore,
+      apiKey,
+      true,
+      true,
+      false,
+      true
+    );
+    return sources;
   }
 
   static async loadDemoDocuments(sessionId: string, apiKey?: string): Promise<{ totalChunks: number; files: string[] }> {
@@ -262,7 +524,7 @@ export class VectorStoreManager {
       totalDocuments: store.files.size,
       totalChunks: store.chunks.length,
       files: Array.from(store.files),
-      embeddingType: hasEmbeddings ? "Gemini text-embedding-004" : "BM25 Vector Scoring Engine",
+      embeddingType: hasEmbeddings ? "Hybrid BM25 + Gemini text-embedding-004" : "Hybrid BM25 + Vector Scoring Engine",
       llmModel: "Gemini 2.0 Flash / 1.5 Flash",
     };
   }
