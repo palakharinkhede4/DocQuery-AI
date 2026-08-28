@@ -41,6 +41,29 @@ interface DocumentPanelProps {
   onUploadSuccess: () => void;
 }
 
+async function parseResponseSafe(res: Response) {
+  const text = await res.text().catch(() => "");
+  let data: any = null;
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    if (res.status === 413 || text.toLowerCase().includes("request entity too large")) {
+      throw new Error("File exceeds serverless upload limit (4.5MB). Please upload smaller files.");
+    }
+    if (!res.ok) {
+      throw new Error(`Server returned HTTP ${res.status}: ${text.slice(0, 120)}`);
+    }
+    throw new Error(`Unexpected server response: ${text.slice(0, 120)}`);
+  }
+
+  if (!res.ok || data?.status === "error") {
+    throw new Error(data?.message || data?.error || `Upload failed (HTTP ${res.status})`);
+  }
+
+  return data;
+}
+
 export function DocumentPanel({
   sessionId,
   files,
@@ -74,25 +97,36 @@ export function DocumentPanel({
 
     setIsUploading(true);
     setIsError(false);
-    setStatusMessage(`Processing ${selectedFiles.length} document(s)...`);
 
-    const formData = new FormData();
-    for (let i = 0; i < selectedFiles.length; i++) {
-      formData.append("files", selectedFiles[i]);
-    }
+    const fileList = Array.from(selectedFiles);
+    let totalAddedChunks = 0;
+    let successfulFiles = 0;
 
     try {
-      const res = await fetch(`/api/documents?session_id=${sessionId}`, {
-        method: "POST",
-        body: formData,
-      });
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
+        
+        // Client-side file size check for Serverless 4.5MB limit
+        if (file.size > 4.5 * 1024 * 1024) {
+          throw new Error(`"${file.name}" is ${(file.size / (1024 * 1024)).toFixed(1)}MB, exceeding the 4.5MB limit. Please upload smaller documents.`);
+        }
 
-      const data = await res.json();
-      if (!res.ok || data.status === "error") {
-        throw new Error(data.message || "Failed to process documents.");
+        setStatusMessage(`Processing (${i + 1}/${fileList.length}): ${file.name}...`);
+
+        const formData = new FormData();
+        formData.append("files", file);
+
+        const res = await fetch(`/api/documents?session_id=${sessionId}`, {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await parseResponseSafe(res);
+        totalAddedChunks += data.totalChunks || 0;
+        successfulFiles++;
       }
 
-      setStatusMessage(`Indexed ${data.totalChunks} chunks from ${data.documentsCount} file(s).`);
+      setStatusMessage(`Indexed ${fileList.length} document(s) successfully.`);
       onUploadSuccess();
       setTimeout(() => setStatusMessage(null), 4000);
     } catch (err: unknown) {
@@ -116,11 +150,7 @@ export function DocumentPanel({
         method: "POST",
       });
 
-      const data = await res.json();
-      if (!res.ok || data.status === "error") {
-        throw new Error(data.message || "Failed to load sample dataset.");
-      }
-
+      const data = await parseResponseSafe(res);
       setStatusMessage(`Loaded ${data.documentsCount} sample documents (${data.totalChunks} chunks).`);
       onUploadSuccess();
       setTimeout(() => setStatusMessage(null), 4000);
@@ -187,7 +217,7 @@ export function DocumentPanel({
                 {isUploading ? "Extracting & Indexing..." : "Click to upload or drag files"}
               </p>
               <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
-                PDF, DOCX, TXT, MD, CSV (Max 25MB)
+                PDF, DOCX, TXT, MD, CSV (Max 4.5MB/file)
               </p>
             </div>
           </div>

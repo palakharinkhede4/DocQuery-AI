@@ -11,6 +11,29 @@ function generateSessionId(): string {
   return "session_" + Math.random().toString(36).substring(2, 10) + Date.now().toString(36).substring(4);
 }
 
+async function parseResponseSafe<T>(res: Response): Promise<T> {
+  const text = await res.text().catch(() => "");
+  let data: any = null;
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    if (res.status === 413 || text.toLowerCase().includes("request entity too large")) {
+      throw new Error("Request payload is too large for the serverless limit (max 4.5MB).");
+    }
+    if (!res.ok) {
+      throw new Error(`Server returned HTTP ${res.status}: ${text.slice(0, 120)}`);
+    }
+    throw new Error(`Unexpected server response: ${text.slice(0, 120)}`);
+  }
+
+  if (!res.ok) {
+    throw new Error(data?.error || data?.message || `Request failed with status ${res.status}`);
+  }
+
+  return data as T;
+}
+
 export default function Home() {
   const [sessionId, setSessionId] = useState<string>("");
   const [files, setFiles] = useState<string[]>([]);
@@ -78,7 +101,7 @@ export default function Home() {
     try {
       const res = await fetch(`/api/documents?session_id=${sid}`);
       if (res.ok) {
-        const stats: SessionStats = await res.json();
+        const stats = await parseResponseSafe<SessionStats>(res);
         setFiles(stats.files || []);
         setTotalChunks(stats.totalChunks || 0);
       }
@@ -140,11 +163,7 @@ export default function Home() {
         }),
       });
 
-      const data: QueryResponse = await res.json();
-      if (!res.ok) {
-        throw new Error((data as unknown as { error?: string }).error || "Query execution failed.");
-      }
-
+      const data = await parseResponseSafe<QueryResponse>(res);
       setHistory((prev) => [data, ...prev]);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Error executing query.";
