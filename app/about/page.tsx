@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  BookOpen,
   Github,
   Linkedin,
   Globe,
@@ -13,10 +12,8 @@ import {
   Cpu,
   Layers,
   Sparkles,
-  Search,
   Crosshair,
   Filter,
-  CheckCircle2,
   FileText,
   Sun,
   Moon,
@@ -180,27 +177,46 @@ export default function AboutPage() {
         {/* Creator / Owner Profile Card */}
         <section className="rounded-2xl border border-stone-200 dark:border-stone-800/90 bg-white dark:bg-stone-900/60 p-6 sm:p-8 shadow-sm backdrop-blur-sm">
           <div className="flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-stone-900 text-stone-100 dark:bg-stone-100 dark:text-stone-950 font-bold text-lg shadow-sm">
-                  PH
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              {/* Profile Image */}
+              <div className="relative h-20 w-20 shrink-0 rounded-2xl overflow-hidden border-2 border-stone-300 dark:border-stone-700 shadow-md">
+                <img
+                  src="/palak.jpg"
+                  alt="Palak Harinkhede"
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-bold text-stone-900 dark:text-stone-100">
                     Palak Harinkhede
                   </h2>
-                  <p className="text-xs text-stone-500 dark:text-stone-400 font-medium">
-                    AI/ML & Full-Stack Systems Engineer
-                  </p>
+                  <span className="rounded-full bg-blue-100 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 px-2 py-0.5 text-[10px] font-semibold text-blue-800 dark:text-blue-300">
+                    Creator & Author
+                  </span>
                 </div>
+                <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 font-medium">
+                  AI/ML & Full-Stack Systems Engineer
+                </p>
+                <p className="text-xs text-stone-600 dark:text-stone-300 max-w-lg leading-relaxed pt-1">
+                  Passionate about building production-grade LLM architectures, multi-agent AI pipelines, semantic search engines, and scalable edge systems.
+                </p>
               </div>
-              <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-300 max-w-xl leading-relaxed pt-1">
-                Passionate about building production-grade LLM architectures, multi-agent AI pipelines, semantic search engines, and scalable edge systems.
-              </p>
             </div>
 
             {/* Social & Contact Links */}
             <div className="flex flex-wrap gap-2.5 w-full md:w-auto">
+              <a
+                href="https://palakharinkhede4.github.io/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 dark:border-purple-900/60 bg-purple-50 dark:bg-purple-950/40 px-4 py-2.5 text-xs font-medium text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60 transition-colors shadow-sm"
+              >
+                <Globe className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                <span>Portfolio</span>
+                <ExternalLink className="h-3 w-3 opacity-60" />
+              </a>
+
               <a
                 href="https://www.linkedin.com/in/palakharinkhede/"
                 target="_blank"
@@ -208,7 +224,7 @@ export default function AboutPage() {
                 className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50 dark:bg-blue-950/40 px-4 py-2.5 text-xs font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors shadow-sm"
               >
                 <Linkedin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <span>LinkedIn Profile</span>
+                <span>LinkedIn</span>
                 <ExternalLink className="h-3 w-3 opacity-60" />
               </a>
 
@@ -219,7 +235,7 @@ export default function AboutPage() {
                 className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-stone-100 dark:bg-stone-800 px-4 py-2.5 text-xs font-medium text-stone-800 dark:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors shadow-sm"
               >
                 <Github className="h-4 w-4" />
-                <span>GitHub Profile</span>
+                <span>GitHub</span>
                 <ExternalLink className="h-3 w-3 opacity-60" />
               </a>
 
@@ -229,7 +245,7 @@ export default function AboutPage() {
                 className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 px-4 py-2.5 text-xs font-medium text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors shadow-sm"
               >
                 <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                <span>Masterclass PDF Handbook</span>
+                <span>Masterclass PDF</span>
               </a>
             </div>
           </div>
@@ -346,6 +362,9 @@ export default function AboutPage() {
         <section className="border-t border-stone-200 dark:border-stone-800/80 pt-8 pb-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-stone-500 dark:text-stone-400">
           <p>© 2026 DocQuery AI. Engineered by <strong>Palak Harinkhede</strong>.</p>
           <div className="flex items-center gap-4">
+            <a href="https://palakharinkhede4.github.io/" target="_blank" rel="noopener noreferrer" className="hover:text-stone-900 dark:hover:text-stone-100 transition-colors">
+              Portfolio
+            </a>
             <a href="https://www.linkedin.com/in/palakharinkhede/" target="_blank" rel="noopener noreferrer" className="hover:text-stone-900 dark:hover:text-stone-100 transition-colors">
               LinkedIn
             </a>
