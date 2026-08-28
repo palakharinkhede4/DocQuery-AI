@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "DocQuery — Technical Document Intelligence",
-  description: "Session-isolated document intelligence and question answering engine.",
+  title: "DocQuery — Document Assistant & Q&A",
+  description: "Ask questions across your documents with verified, accurate answers.",
   icons: {
     icon: "/favicon.ico",
   },
